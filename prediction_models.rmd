@@ -1,0 +1,783 @@
+---
+title: "Prediction Models"
+author: "Lucie Woellenstein"
+output: html_document
+---
+
+This script carried out the modelling of the outcome variable
+- script was repeated fro every outcome variable / data set
+
+
+```{r setup, include=FALSE}
+#set working directory of the whole document (includes 3 folders: raw_data, clean_data, research) - reset for every code chunk reading
+knitr::opts_knit$set(root.dir="path/to/file") # put in correct path
+
+# load libraries
+library("caret")
+library("stats")
+library("DescTools")
+library("mlbench")
+library("glmnet")
+library("gbm")
+library("randomForest")
+library("adabag")
+library("xgboost")
+library("fastAdaboost")
+library("pROC")
+library("tidyverse")
+library("GGally")
+library("tidymodels")
+library("ConfusionTableR")
+library("praznik")
+library("gridExtra")
+library("grid")
+library("broom")
+library("inspectdf")
+
+# create object for folder to write to 'research/report/' should be inside working directory
+folder <- "/research/report/"
+```
+
+LOAD AND PREPARE THE DATA
+
+```{r}
+# load the data 
+data <- read_csv("/clean_data/clean_data.csv") 
+
+
+# prepare the data - factorise categorical, remove unwanted variables
+data <- data %>%
+  mutate(person_id = NULL,
+         time_error = NULL,
+         made_homelessness_application = NULL, # removed as it was the other outcome variable correlated with the one modelled here
+         RSNSCT = as.factor(RSNSCT),
+         ethnicity = as.factor(ethnicity),
+         REASON = as.factor(REASON),
+         PROPERTY = as.factor(PROPERTY),
+         gender = as.factor(gender),
+         SUPPORT = as.factor(SUPPORT),
+         other_activity = other, # better name - so known it is about the prevention activity
+         other = NULL, # remove old other
+         previous_approach = new_previous_approach, # gave shorter name
+         new_previous_approach = NULL,
+         APP2ACT = NULL,
+         ACT2OUT = NULL)
+
+# inspect column types
+data %>% 
+  inspect_types %>% 
+  show_plot()
+
+```
+
+SPLIT THE DATA 
+- 80% training data, 20% testing data
+
+```{r}
+# for reproducibility - split same way every time
+set.seed(123) 
+
+# split data into training and test samples using caret package
+# equal percentages of event case in both training and test set
+# create index on rows
+trainIndex <- createDataPartition(data$outcome, 
+                                  p = .8, # 80% training
+                                  list = FALSE)
+
+# subset the train data
+train <- data[trainIndex,]
+# subset the test data (does not include the trainIndex)
+test <- data[-trainIndex,]
+
+
+# check proportions are same in train and test data
+train %>% 
+  group_by(outcome) %>% 
+  dplyr::summarize(count = n(),
+                   prop=round(sum(count)/nrow(.)*100,2)) 
+
+test %>% 
+  group_by(outcome) %>% 
+  dplyr::summarize(count = n(), 
+                   prop=round(sum(count)/nrow(.)*100,2)) 
+
+# factorise outcome var- required to measure the ROC and include class probabilities in trainControl() later on
+train <- train %>%
+  mutate(outcome = as.factor(outcome))
+test <- test %>%
+  mutate(outcome = as.factor(outcome))
+
+# relevel the outcome variable so the event case is the right one
+train <- train %>%
+  mutate(outcome = relevel(outcome, 
+                           "unsuccessful"))
+test <- test %>%
+  mutate(outcome = relevel(outcome, 
+                           "unsuccessful"))
+
+```
+
+WRITE NECESSARY FUNCTIONS
+ - includes setting up the trainControl()s that will be used in models below
+ - custom function to retrieve AUROC 
+ - setting the mtry for random forest
+
+```{r}
+# set up control function for training glm algorithms
+ctrl_repeatedcv <- trainControl(method = "repeatedcv",
+                                number = 10,
+                                repeats = 5,
+                                summaryFunction = twoClassSummary,
+                                classProbs = TRUE,
+                                verboseIter = TRUE)
+
+# set up control function for training tree based algorithms (the repeated cv takes too long for tree based systems)
+ctrl_cv <- trainControl(method = "cv",
+                        number = 10,
+                        summaryFunction = twoClassSummary,
+                        classProbs = TRUE,
+                        verboseIter = TRUE)
+
+# set mtry for the random forest models
+mtry <- sqrt(ncol(train))
+
+# Build custom AUC function to extract AUC from the caret model object
+test_roc <- function(model, data) {
+  roc(data$outcome,
+      predict(model, data, type = "prob")[,"successful"])
+}
+
+# new function specifically for xgb to take the testing Y outcome variable and the d matrix as training data set
+xgbtest_roc <- function(model, data, Y) {
+  roc(Y,
+      predict(model, data, type = "prob")[,"successful"])
+}
+
+```
+
+
+BUILD AN ELASTIC NET CLASSIFIER WHICH USES L1 AND L2 REGULARIZATION
+
+```{r}
+
+# for reproducibility
+set.seed(123)
+
+# train model 
+Enet_Fit <- train(outcome ~ ., 
+                  data = train, 
+                  method = "glmnet",
+                  metric = "ROC", # required for extracting AUROC later
+                  trControl = ctrl_repeatedcv, 
+                  # alpha and lambda parameters to try
+                  tuneGrid = data.frame(alpha = 0.5, # degree of mixing between lasso and ridge regression 0 = full ridge, 1 = full lasso
+                                        lambda = seq(0.001,0.1, 0.02))) # shrinkage parameter - higher value = more shrinkage of coefficients
+# find what the best lambda was
+Enet_Fit$bestTune 
+
+summary(Enet_Fit)
+# Lines must cross, or collinearity present
+plot(Enet_Fit)
+
+# extract the coefficients for the eNet model
+ENet_coefs <- Enet_Fit$finalModel %>%
+  coef(Enet_Fit$bestTune$lambda) %>%
+  tidy() %>%
+  mutate(Term = row, 
+         row = NULL, 
+         Estimate = value, 
+         value = NULL, 
+         column = NULL) %>%
+  arrange(desc(abs(Estimate)))
+print(ENet_coefs) 
+
+# write the csv of eNet coefficients
+write.csv(ENet_coefs, 
+          file.path(folder, "ENet_coefs.csv"), 
+          row.names = FALSE)
+
+```
+
+ELASTIC NET MODEL EVALUATION
+
+```{r}
+
+# TEST THE MODEL ON TEST DATA SET
+# binary_class_cm provides several performance metrics
+ENet_metrics <- Enet_Fit %>%
+  predict(test) %>%
+  binary_class_cm(test$outcome , 
+                  positive = "successful") # specify which class is the positive class (event case)
+
+
+# CALCULATE THE AUROC with custom function built
+ENet_AUROC <- Enet_Fit %>% 
+               test_roc(data = test) %>% 
+               auc()
+
+ENet_metrics <- ENet_metrics[[2]] %>%
+  cbind(AUROC = ENet_AUROC) 
+
+print(ENet_metrics)
+```
+
+CALCULATE THE VARIABLE IMPORTANCE MEASURES FOR ELASTIC NET MODEL
+
+```{r enetvim}
+# pull out the VIMs for each variable in the ENet model
+EnetFit_imp <- varImp(Enet_Fit, 
+                      scale = TRUE)$importance %>%
+  as.data.frame() %>%
+  rownames_to_column() %>%
+  arrange(desc(Overall)) # overall is the measure
+
+# view VIMs
+print(EnetFit_imp)
+
+# save VIMs in csv
+write.csv(EnetFit_imp, 
+          file.path(folder, "ENet_VIM.csv"), 
+          row.names = FALSE)
+```
+
+
+BUILD A LOGISTIC REGRESSON MODEL USING MRMR FEATURE SELECTION
+- first Max relevance minimum redundancy (mRMR) feature selection is used to order variables from max relevance to the outcome variable and minimum redundancy to other variables 
+- this creates formulas to use in the training the model, each formula adds a variable. 
+- the performance metrics are graphed for each formula, and the best formula is the one where performance is highest and does not continue to improve
+
+
+```{r}
+### MRMR - MAX RELEVANCE, MIN REDUNDANCY - FEATURE SELECTION TECHNIQUE ###
+
+# get the mutual information of all features in the feature space - for understanding purposes
+# essentially how important each variable is for predicting another variable
+mutual_information <- mutinformation(data, method = "emp")
+
+# mutual information is a measure of the inherent dependence expressed in the joint distribution of 
+# and relative to the marginal distribution of and under the assumption of independence
+
+# extract all the predictor variables from data set
+features <- data %>%
+    select(-outcome)
+
+# calculate K (K = the number of available predictor variables)
+K <- length(features)
+
+# perform MRMR for all possible number of features to have in the model (1:K)
+MRMR <- lapply(c(1:K), 
+               function(x) MRMR(features, 
+                                as.factor(data$outcome), 
+                                k = x))
+
+# extract the predictor variable names in order of max relevance minimum redundancy
+MRMR_selection <- names(MRMR[[K]]$selection)
+
+# write the formulas to go into the training model for each K
+formulas <- lapply(c(1:K), 
+                   function(x) as.formula(paste("outcome ~", 
+                                                paste(MRMR_selection[1:x], 
+                                                      collapse = "+"))))
+print(formulas)
+```
+
+
+
+```{r}
+
+
+# for reproducibility
+set.seed(123)
+
+# train logistic regression model for each formula created with MRMR (each one has an additional variable) 
+LRK_Fit <- lapply(formulas, 
+                  train, # this train is the function train()
+                  data = train, 
+                  method = "glm",
+                  family = "binomial", # logistic regression from the "glm" method
+                  metric = "ROC", # required for extracting AUROC later
+                  control = glm.control(maxit = 50), # max iterations to convergence 
+                  trControl = ctrl_repeatedcv) # use repeated cv as specified at start of script
+
+# see summary statistics for each LR model
+lapply(LRK_Fit, 
+       summary)
+
+```
+
+LOGISTIC REGRESSION WITH MRMR MODEL EVALUATION
+
+```{r}
+
+# TEST ACCURACY FOR LRKFIT MODELS USING TEST DATA SET
+
+# create an empty list to populate with performance metrics of each LR model
+LRK_metrics <- list()
+
+# for every LR model created, predict using test data set and calculate the performance metrics with binary_class_cm()
+for (i in 1:K) { 
+  stats <- LRK_Fit[[i]] %>%
+              predict(test) %>%
+              binary_class_cm(test$outcome, 
+                              positive = "successful") %>% # specify which class is the positive class (event case)
+              .$record_level_cm
+  # number the rows in stats data frame with (1:K) for each i^th LR model trained (each row holds performance metrics for one LR model)
+  stats$K <- i
+  # add stats to the empty list created above
+  LRK_metrics[[i]] <- stats
+}
+
+# bind the items of list LRK_metrics to create a data frame instead
+# "rank deficient" models may appear at higher values of K include collinear variables - these models cannot be chosen as best models
+LRK_metrics <- LRK_metrics %>%
+  bind_rows() %>%
+  relocate(K, 
+           .before = everything())
+print(LRK_metrics)
+
+```
+
+EXTRACT THE AUROC OF ALL THE LOGISTIC REGRESSION MODELS
+
+```{r}
+# CALCULATE THE AUROC 
+LRK_AUROC <- lapply(c(1:K), 
+                    function(x) LRK_Fit[[x]] %>% 
+                    test_roc(data = test) %>% 
+                    auc())
+
+# turn list created above into a data frame
+LRK_AUROC <- as.data.frame(matrix(unlist(LRK_AUROC), 
+                                  nrow = length(LRK_AUROC), 
+                                  byrow = T))
+
+# change the column name of V1 to AUROC
+LRK_AUROC <- LRK_AUROC %>%
+  mutate(AUROC = V1, 
+         V1 = NULL)
+
+# bind the AUROCs to the LRK_metrics data frame
+LRK_metrics <- LRK_metrics %>%
+  cbind(LRK_AUROC)
+print(LRK_metrics)
+
+# save out data fram of performance metrics for each LR model (1:K)
+write.csv(LRK_metrics, 
+          file.path(folder, "LRK_metrics.csv"), 
+          row.names = FALSE)
+
+```
+
+GRAPH THE PERFORMANCE METRICS OF EACH LR MODEL (1:K) TO CHOOSE THE BEST PERFORMING MODEL THAT WAS NOT RANK DEFICIENT
+
+```{R}
+# create data frame for 1:K containing just F1, accuracy, AUROC, sensitivity and specificity (these will be graphed)
+df <- LRK_metrics %>%
+  dplyr::select(K, 
+                F1, 
+                Accuracy, 
+                AUROC, 
+                Sensitivity, 
+                Specificity) %>%
+  gather(key = "variable", 
+         value = "value", 
+         -K)
+
+# create object for maxK which is the maximum number of features
+maxk <- 26
+
+# plot the AUROC for each K number for both algorithms
+mRMR_LR_graph <- df %>% 
+  ggplot(mapping = aes(x = K, 
+                       y = value, 
+                       group = variable))  +
+  # colors of each line (each performance metric)
+  scale_color_manual(values =  c("red", 
+                                 "blue",
+                                 "dark green",
+                                 "hot pink", 
+                                 "yellow")) +
+  # assign colors to the variable column of df (performance metrics)
+  geom_line(aes(color = variable))  +
+  labs(y = "Metrics") +
+  scale_x_continuous(name = "K: Number of Variables in Model",
+                     minor_breaks = seq(1, maxK, 1)) +
+  guides(col = guide_legend("Performance Metric")) 
+
+# print the graph & visually pick best model (highest performance metrics & where additional features don't improve the model)
+mRMR_LR_graph 
+```
+
+EXTRACT THE COEFFICIENTS, STANDARD ERRORS, P-VALUES FOR BEST LR MRMR MODEL
+
+```{r}
+# extract the coefficients from the best model (picked in the graph in the last section)
+LRK_coefs <- LRK_Fit[[26]]$finalModel %>%
+  tidy() %>%
+  arrange(desc(abs(estimate)))
+
+print(LRK_coefs)
+
+# save these out to a csv
+write.csv(LRK_coefs, 
+          file.path(folder, "LRK_coefs.csv"), 
+          row.names = FALSE)
+
+```
+
+CALCULATE THE VARIABLE IMPORTANCE MEASURES FOR THE BEST LR MRMR MODEL
+
+```{r}
+# extract VIMs for best LR model 
+LRKFit_imp <- varImp(LRK_Fit[[26]], 
+                     scale = TRUE)$importance %>%
+  as.data.frame() %>%
+  rownames_to_column() %>%
+  arrange(desc(Overall))
+
+print(LRKFit_imp)
+
+# save out the variable importance measures 
+write.csv(LRKFit_imp, 
+          file.path(folder, "LRK_VIM.csv"), 
+          row.names = FALSE)
+
+```
+
+BUILD A VARIETY OF TREE BASED CLASSIFIERS
+- random forest model
+- Bagged Adaboost model (built on tree classifiers)
+- Adaboost.M1 model (built on tree classifiers)
+- Extreme gradient boosting model (built on tree classifiers)
+
+TRAIN A RANDOM FOREST MODEL (RF)
+
+```{r}
+# for reproducibility
+set.seed(123)
+
+# train random forest model
+rf_Fit <- train(outcome ~ ., 
+               data = train, 
+               method = "rf", 
+               metric = "ROC", # required for extracting AUROC later
+               trControl = ctrl_cv, # cross validation set at start of script - don't use repeated as takes too long
+               tuneGrid = expand.grid(.mtry = mtry)) # mtry set at start of script (square root of number of predictors)
+
+summary(rf_Fit)
+```
+
+RF MODEL EVALUATION
+
+```{r}
+# use test data set to evaluate the model
+
+# predict on the test data set using random forest model
+RF_metrics <- rf_Fit %>%
+    predict(test) %>%
+  # calculate performance metrics using binary_class_cm()
+    binary_class_cm(test$outcome, 
+                    positive = "successful") # specify the event case 
+
+# calculate the AUROC using custom function written at start of script
+RF_AUROC <- rf_Fit %>% 
+             test_roc(data = test) %>% 
+             auc() 
+
+# bind the AUROC to the RF_metrics data frame which holds all other performance metrics
+RF_metrics <- RF_metrics[[2]] %>%
+  cbind(AUROC = RF_AUROC)
+
+print(RF_metrics)
+```
+
+CALCULATE THE VARIABLE IMPORTANCE MEASURES FOR RF MODEL
+
+```{r}
+# extract variable importance measures from the random forest model
+rfFit_imp <- varImp(rf_Fit, 
+                    scale = TRUE)$importance %>%
+  as.data.frame() %>%
+  rownames_to_column() %>%
+  arrange(desc(Overall)) # overall is the measure
+
+print(rfFit_imp)
+
+# save the VIMs for the random forest model in csv
+write.csv(rfFit_imp, 
+          file.path(folder, "RF_VIM.csv"), 
+          row.names = FALSE)
+
+```
+
+BUILD A BAGGED ADABOOST MODEL
+ - combines Freund and Schapire's Adaboost.M1 algorithm and Breiman's bagging algorithm
+
+```{r}
+# for reproducibility 
+set.seed(123)
+
+# set the tuneGrid specifically for bagged adaboost (paramters to set)
+baggedgrid = expand.grid(mfinal = seq(1,5,1), # number of trees in model to try
+                         maxdepth = 10)  # maximum depth of a tree
+
+# train model using bagged AdaBoost
+B_Adaboost_Fit <- train(outcome~., 
+                      data = train, 
+                      method = "AdaBag",
+                      tuneGrid = baggedgrid,
+                      trControl = ctrl_cv, # cross validation set at start of script
+                      metric = "ROC") # required for extracting AUROC later
+
+# get statistics of bagged adaboost model
+B_Adaboost_Fit
+
+# provides the best parameters trialled in the tunGrid baggedgrid object
+B_Adaboost_Fit$bestTune 
+
+```
+
+BAGGED ADABOOST MODEL EVALUATION
+
+```{r}
+ 
+# evaluate Bagged Adaboost model on test data 
+B_Adaboost_metrics <- B_Adaboost_Fit %>%
+  # use the test data set to predict here
+  predict(test) %>%
+  # calculate performance metrics using binary_class_cm()
+  binary_class_cm(test$outcome, 
+                  positive = "successful") # set the event case class of the outcome variable
+
+# calculate AUROC using custome function written at start of script
+B_Adaboost_AUROC <- B_Adaboost_Fit %>% 
+             test_roc(data = test) %>% 
+             auc() 
+
+# bind the AUROC to the bagged adaboost model
+B_Adaboost_metrics <- B_Adaboost_metrics[[2]] %>%
+  cbind(AUROC = B_Adaboost_AUROC)
+
+print(B_Adaboost_metrics)
+
+```
+
+CALCULATE THE VARIABLE IMPORTANCE MEASURES FOR THE BAGGED ADABOOST MODEL
+
+```{r}
+
+# variable importance for bagged adaboost
+B_Adaboost_imp <- varImp(B_Adaboost_Fit, 
+                         scale = TRUE)$importance %>%
+  as.data.frame() %>%
+  rownames_to_column() %>%
+  arrange(desc(Overall)) # overall is the VIM column 
+
+print(B_Adaboost_imp)
+
+# save bagged adaboost VIMs to csv
+write.csv(B_Adaboost_imp, 
+          file.path(folder, "BAdaboost_VIM.csv"), 
+          row.names = FALSE)
+
+
+```
+
+BUILD A ADABOOST.M1 MODEL
+- chooses between Breiman and Freund as the coeflearn parameter
+
+``` {r}
+
+# for reproducibility
+set.seed(123)
+
+# set up the tunGrid for training
+M1grid = expand.grid(mfinal = seq(1,5,1), # trial depths 1-5
+                     maxdepth = 10,
+                     coeflearn = c("Freund", "Breiman")) # trial both coeflearn parameters
+
+# TRAIN ADABOOST.M1 MODEL
+AdaboostM1_Fit <- train(outcome~., 
+                      data = train, 
+                      method = "AdaBoost.M1",
+                      tuneGrid = M1grid,
+                      trControl = ctrl_cv, # cross validation set up at start of script
+                      metric = "ROC") # required to extract AUROC later
+
+# print statistics about the Adaboost.M1 mdeol 
+AdaboostM1_Fit 
+# bestTune provides the intrinsically chosen best paramters
+AdaboostM1_Fit$bestTune 
+```
+
+ADABOOST.M1 MODEL EVALUATION 
+
+```{r}
+
+# use the test data set to predict with Adaboost.M1 model 
+AdaboostM1_metrics <- AdaboostM1_Fit %>%
+  predict(test) %>%
+  # calculate performance metrics with binary_class_cm()
+  binary_class_cm(test$outcome, 
+                  positive = "successful") # set to event case class
+
+# calculate AUROC with the custom function written at start of script
+AdaboostM1_AUROC <- AdaboostM1_Fit %>% 
+             test_roc(data = test) %>% 
+             auc() 
+
+# bind the AUROC to the performance metrics of the rest of the model
+AdaboostM1_metrics <- AdaboostM1_metrics[[2]] %>%
+  cbind(AUROC = AdaboostM1_AUROC)
+
+print(AdaboostM1_metrics)
+
+```
+
+CALCULATE THE VARIABLE IMPORTANCE MEASURES FOR ADABOOST.M1 MODEL 
+
+```{r adaboostM1 vim}
+# extract VIMs for adaboost.M1 model
+AdaboostM1_imp <- varImp(AdaboostM1_Fit, 
+                         scale = TRUE)$importance %>%
+  as.data.frame() %>%
+  rownames_to_column() %>%
+  arrange(desc(Overall)) # overall is the VIM column
+
+print(AdaboostM1_imp)
+
+# save the VIMs to a csv
+write.csv(AdaboostM1_imp, 
+          file.path(folder, "AdaboostM1_VIM.csv"), 
+          row.names = FALSE)
+
+```
+
+BUILD AN EXTREME GRADIENT BOOSTING (XGB) MODEL ON TREE CLASSIFIERS
+
+XGB turns weak classifiers into strong classifiers.
+It uses parallel computing - by default uses all the cores your computer has
+It also uses regularization - automatically avoids overfitting in linear and tree based methods
+It handles missing values internally. 
+if trends in the missing values are detected it will be captured by the model.
+
+
+```{r }
+
+### PREPARE THE DATA FOR XGB MODEL ###
+# requires One hot encoding (turn any categorical & outcome variables to numeric logical vars) 
+
+
+# create vectors of outcome variables for train and test data set (& set outcome vars to 0s and 1s if not already)
+trainY <- train$outcome
+testY <- test$outcome
+
+# create the X matrices for the train and test data sets ( holds the predictor variables) and perform one hot encoding on matrix
+trainX <- model.matrix(~.+0, 
+                       data = train %>% 
+                         select(-outcome)) 
+testX <- model.matrix(~.+0, 
+                      data = test %>% 
+                        select(-outcome))
+
+# make tuneGrid for training
+XGBgrid <- expand.grid(nrounds = c(10,50,100), # number of iterations or trees the algorithm will use
+                       max_depth = c(10,50,100), # the depth of tree 
+                       eta = 0.3, # learning rate between 0-1 which shrinks weights of missclassification of points (lower values = slow)
+                       gamma = 0, # minimum loss reduction controls the regularization (default in sklearn in python) start at 0 and check CV error rate. if the train error > test error, increase gamma. higher gamma = lower difference in train and test CV.
+                       colsample_bytree = seq(0.5, 0.9, 
+                                              length.out = 5), # subsample ratio of variables at each node 
+                       min_child_weight = 1, # minimum sum of instance weight (default for sklearn in python)
+                       subsample = 1) # subsample percentage - this is default for sklearn in python
+
+
+```
+
+TRAIN THE XGB MODEL
+
+```{r train XGB}
+# for reproducibility
+set.seed(123)
+
+# train the XGB model
+XGBFit <- train(trainX, # x matrix for train data set
+                trainY, # y vector for train data set
+                trControl = ctrl_cv, 
+                tuneGrid = XGBgrid,
+                method = "xgbTree",
+                metric = "ROC") # required to extract AUROC later
+
+# check the intrinsically chosen parameters were XGB model performed best
+XGBFit$bestTune 
+```
+
+XGB MODEL EVALUATION
+
+```{r}
+# use x matrix of test data set to predict using trained Adaboost.M1 model
+XGB_metrics <- XGBFit %>%
+  predict(testX) %>%
+  # use binary_class_cm() to calculate performance metrics
+  binary_class_cm(testY, # use y vector of test data set
+                  positive = "successful") # specify the event case class
+
+# Calculate AUROC using custom built function for the XGB model
+XGB_AUROC <- XGBFit %>%
+  xgbtest_roc(data = testX, 
+              Y = testY) %>%
+  auc()
+
+# bind the AUROC to the performance metrics
+XGB_metrics <- XGB_metrics[[2]] %>%
+  cbind(AUROC = XGB_AUROC)
+
+print(XGB_metrics)
+ 
+
+```
+
+CALCULATE THE VARIABLE IMPORTANCE MEASURES FOR XGB MODEL
+
+```{r xgbvim}
+# VARIABLE IMPORTANCE FOR adaboost
+XGB_imp <- varImp(XGBFit, 
+                  scale = TRUE)$importance %>%
+  as.data.frame() %>%
+  rownames_to_column() %>%
+  arrange(desc(Overall)) # overall is the column holding the VIM
+
+print(XGB_imp)
+
+# save the VIMs for XGB model to a csbv
+write.csv(XGB_imp, 
+          file.path(folder, "XGB_VIM.csv"), 
+          row.names = FALSE)
+
+```
+
+CREATE A DATA FRAME HOLDING PERFORMANCE METRICS OF ALL MODELS
+
+```{r}
+# CSV for all metrics
+metrics_df <- rbind(ENet_metrics, 
+                    LRK_metrics[14, 2:25], # subset the best model e.g. the 14th (using 14 predictor variables)
+                    RF_metrics,
+                    B_Adaboost_metrics, 
+                    AdaboostM1_metrics, 
+                    XGB_metrics) %>%
+  cbind(Algorithm = c("ENet", 
+                      "LR_mRMR", 
+                      "RF", 
+                      "Bagged_Adaboost", 
+                      "AdaboostM1", 
+                      "XGB")) %>%
+  relocate(Algorithm, 
+           .before = everything())
+print(metrics_df)
+
+# save the data frame of performance metrics to to a csv
+write.csv(metrics_df, 
+          file.path(folder, "model_metrics.csv"), 
+          row.names = FALSE)
+```
+
