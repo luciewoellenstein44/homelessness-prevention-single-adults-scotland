@@ -19,8 +19,8 @@ library("GGally")
 library("skimr")
 library("readr")
 library("WVPlots")
-# load in the bonferroni adjustment function 'chisq.post.hoc' from research/functions folder
-source("/research/functions/bonferroni.r") # full file path
+# load in the bonferroni adjustment function 'chisq.post.hoc' from this webpage
+source('https://raw.githubusercontent.com/PassionDrivenStatistics/R/master/ChiSquarePostHoc.R')
 
 ```
 
