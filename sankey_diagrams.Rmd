@@ -1,0 +1,325 @@
+---
+title: "sankey diagrams"
+author: "Lucie Woellenstein"
+output: html_document
+---
+
+This script creates a Sankey Diagram showing the flow from original property accommodation types of HO approaches to the final outcome property accommodation type.
+
+SET UP 
+
+```{r setup, include=FALSE}
+#set working directory of the whole document (includes 3 folders: raw_data, clean_data, research) - reset for every code chunk reading
+knitr::opts_knit$set(root.dir="path/to/file") # put in correct path
+
+# load necessary libraries (these must be installed if not already)
+library("tidyverse")
+library("rlist")
+library("inspectdf")
+library("networkD3")
+library("htmlwidgets")
+library("data.table")
+
+# create object for where you will write to
+folder <- "/research/report/"
+```
+
+WRITE NECESSARY FUNCTIONS
+
+```{r}
+
+# get percentages rounded to the nearest 5 percentage in each category)
+# can take multiple variables and creates a cross tabulation with proportions
+get_round_prop <- function(var, data) {
+  data %>%
+    group_by(.[var]) %>%
+    summarize(NumPat = round(n()/5)*5, 
+              prop=round(sum(NumPat)/nrow(.)*100,2)) %>%
+    ungroup()
+}
+
+# function renames category values using mutate() ad recode() for PROPERTY variable
+# for visualisation purposes
+reformat_PREVENT1 <- function(df) {
+  df <- df %>%
+    mutate(PROPERTY = as.factor(
+    recode(
+      PROPERTY,
+      "accomm_tied_employment_armed_forces" = "Service tied accommodation",
+      "family" = "Family",
+      "hostel_B&B" = "Hostels & B&Bs",
+      "roofless" = "Roofless",
+      "friends_partners" = "Friends & partners",
+      "home_ownership" = "Home ownership",
+      "hospital" = "Hospital",
+      "LA_tenancy" = "LA tenancy",
+      "lodger" = "Lodger",
+      "other" = "Other",
+      "prison" = "Prison",
+      "PRS_tenancy" = "PRS tenancy",
+      "RSL_tenancy" = "RSL tenancy",
+      "sofa_surfing" = "Sofa-surfing",
+      "supported_accom" = "Supported accommodation",
+      "unknown_refused" = "Unknown or refused"
+    )
+  ))
+}
+  
+```
+
+
+LOAD CLEANED DATA 
+
+```{r}
+data <- read_csv("/clean_data/clean_data.csv")
+
+# clean the data (remove unnecessary variables, rename binary variables where necessary, factorise categorical variables)
+data <- data %>%
+  mutate(refused_vul = NULL, 
+         time_error = NULL, 
+         RSNSCT = as.factor(RSNSCT),
+         ETHNICITY = as.factor(ethnicity),
+         ethnicity = NULL,
+         REASON = as.factor(REASON),
+         PROPERTY = as.factor(PROPERTY),
+         GENDER = as.factor(ifelse(gender==1, 
+                                   "male", 
+                                   "female")),
+         gender = NULL,
+         SUPPORT = as.factor(SUPPORT),
+         other_activity = other,
+         other = NULL,
+         previous_approach = new_previous_approach,# give better name
+         new_previous_approach = NULL,
+         made_homelessness_application = as.factor(ifelse(made_homelessness_application == TRUE, 
+                                                          "YES", 
+                                                          "NO")),
+         fin_vul = as.factor(ifelse(fin_vul == TRUE, 
+                                    "YES",
+                                    "NO")),
+         phys_vul = as.factor(ifelse(phys_vul == TRUE, 
+                                     "YES",
+                                     "NO")),
+         mental_vul = as.factor(ifelse(mental_vul == TRUE, 
+                                       "YES", 
+                                       "NO")),
+         unmetneed_vul = as.factor(ifelse(unmetneed_vul == TRUE, 
+                                          "YES", 
+                                          "NO")),
+         lackofsupport_vul = as.factor(ifelse(lackofsupport_vul == TRUE, 
+                                              "YES",
+                                              "NO")))
+
+# check column types is what you expect
+data %>% 
+  inspect_types %>% 
+  show_plot()
+```
+
+READ IN RAW UNCLEANED DATA
+- retrieves the outcome accommodation locations that were pooled into the binary outcome variable
+- pools the categories of  the raw outcome as the property variable was pooled when data was cleaned
+
+```{r}
+
+# read in raw data change the unique id name get just the outcome and person id and remove duplicates
+raw_data <- read_csv("/raw_data/file.csv")
+
+# rename person id column so it has no spaces
+names(raw_data)[1] <- 'person_id'
+
+# removes any duplicates (i.e. where an approach had more than one column)
+raw_outcome <- raw_data %>%
+  mutate(raw_outcome = OUTCOME, 
+         OUTCOME = NULL) %>%
+  select(person_id, 
+         raw_outcome) %>%
+  group_by(person_id, 
+           raw_outcome) %>%
+  mutate(rank = row_number()) %>%
+  ungroup() %>%
+  filter(rank == 1)
+
+# Pool raw_outcome (which holds outcome accommodation) into the same categories that the PROPERTY variable was
+raw_outcome <- raw_outcome %>%
+  mutate(raw_outcome = case_when(
+    raw_outcome %in% c(1,24) ~ " LA tenancy",
+    raw_outcome %in% c(5,26) ~ " PRS assured tenancy",
+    raw_outcome %in% c(6,7,8,17) ~ " Hostels or womens refuge",
+    raw_outcome == 98 ~ " Remained in accommodation",
+    raw_outcome == 11 ~ " Family & friends",
+    raw_outcome %in% c(12,27) ~" Other tenancy or lodger",
+    raw_outcome == 13 ~ " Other known",
+    raw_outcome == 14 ~ " Not known",
+    raw_outcome %in% c(15,25) ~ " RSL tenancy",
+    raw_outcome == 16 ~ " PRS short assured tenancy",
+    raw_outcome %in% c(18,22,23) ~ " Supported accomm & nursing home",
+    raw_outcome %in% c(19,20,21) ~ " Home ownership",
+    raw_outcome == 28 ~ " Prison",
+    raw_outcome == 29 ~ " Hospital",
+    raw_outcome == 30 ~ " Lost contact",
+    raw_outcome == 99 ~ " Made HL1 application")) %>%
+  mutate(raw_outcome = as.factor(raw_outcome))
+
+
+```
+
+PREPARE ONE DATA FRAME FOR INPUT INTO SANKEY DIAGRAM
+
+```{r}
+# add the raw_outcome variable to the cleaned data set 
+data <- data %>% 
+  left_join(raw_outcome, by = "person_id") %>%
+  mutate(rank = NULL)
+
+# use reformat_PREVENT1 function written above to rename property categories for better visualisation
+data <- reformat_PREVENT1(data)
+
+# turn data frame to data table (to mutate raw_outcome values in next step)
+data <- as.data.table(data)
+
+# where property and raw_outcome were the same, change raw_outcome to remained in accommodation
+data[PROPERTY == "Friends & partners" & raw_outcome == " Family & friends", 
+     raw_outcome:= " Remained in accommodation"]
+
+data[PROPERTY == "Family" & raw_outcome == " Family & friends", 
+     raw_outcome:= " Remained in accommodation"]
+
+data[PROPERTY == "Home ownership" & raw_outcome == " Home ownership",
+     raw_outcome:= " Remained in accommodation"]
+
+data[PROPERTY == "Hospital" & raw_outcome == " Hospital", 
+     raw_outcome:= " Remained in accommodation"]
+
+data[PROPERTY == "Hostels & B&Bs" & raw_outcome == " Hostels or womens refuge",
+     raw_outcome:= " Remained in accommodation"]
+
+data[PROPERTY == "LA tenancy" & raw_outcome == " LA tenancy", 
+     raw_outcome:= " Remained in accommodation"]
+
+data[PROPERTY == "Prison" & raw_outcome == " Prison", 
+     raw_outcome:= " Remained in accommodation"]
+
+data[PROPERTY == "RSL tenancy" & raw_outcome == " RSL tenancy", 
+     raw_outcome:= " Remained in accommodation"]
+
+data[PROPERTY == "Supported accommodation" & raw_outcome == " Supported accomm & nursing home", 
+     raw_outcome:= " Remained in accommodation"]
+
+# turn data table back into data frame for sankey diagram
+data <- as.data.frame(data)
+
+# see the percentage (to nearest 5) in each category or cross tabulation of each category and arrange by size
+as.data.frame(get_round_prop("PROPERTY", 
+                             data)) %>%
+  filter(NumPat != 0) %>%
+  arrange(NumPat)
+
+
+as.data.frame(get_round_prop("raw_outcome", 
+                             data))  %>%
+  filter(NumPat != 0) %>%
+  arrange(NumPat)
+
+as.data.frame(get_round_prop(c("PROPERTY", 
+                               "raw_outcome"), 
+                             data))  %>%
+  filter(NumPat != 0) %>%
+  arrange(NumPat)
+
+```
+
+MAKE SANKEY DIAGRAM
+- requires the creation of links to travel along (property to raw_outcome)
+- requires the creation of nodes on either end of the link (values of property and values of raw_outcome)
+
+```{r sankey diagrams}
+# create links from property variable to the raw_outcome variable 
+links <- as.data.frame(
+  get_round_prop(
+    c("PROPERTY", 
+      "raw_outcome"), 
+    data)) %>%
+  mutate(
+    source = PROPERTY,
+    target = raw_outcome,
+    PROPERTY = NULL,
+    raw_outcome = NULL
+  ) %>%
+  relocate(
+    prop,  
+    .after = last_col()       
+    )
+
+# take out any links that had no one travelling along it
+links <- links %>%
+  filter(prop != 0)
+
+print(links)
+
+# make the nodes (starting node: property) & end node: raw_outcome)
+nodes <- data.frame(
+  name = c(
+  as.character(links$source),
+  as.character(links$target)
+  ) %>%
+  unique())
+
+print(nodes)
+
+# ensure that the IDsource and IDtarget of links has the correct names 
+links$IDsource <- match(links$source,
+                        nodes$name) - 1
+links$IDtarget <- match(links$target, 
+                        nodes$name) - 1
+
+# create the sankey diagram
+sankey <- sankeyNetwork(Links = links, 
+                        Nodes = nodes,
+                        Source = "IDsource", 
+                        Target = "IDtarget",
+                        Value = "prop",
+                        NodeID = "name",
+                        fontSize = 15)
+
+# find percentages for counts in each node
+Perc <- links %>%
+  group_by(source) %>%
+  mutate(sPerc = paste0(round(sum(NumPat) / sum(links$NumPat) * 100, 2), "%")) %>%
+  group_by(target) %>%
+  mutate(dPerc = paste0(round(sum(NumPat) / sum(links$NumPat) * 100, 2), "%")) %>%
+  pivot_longer(c(target, source))%>%
+  mutate(Perc = ifelse(name == "target",
+                       dPerc, 
+                       sPerc)) %>%
+  select(NumPat, 
+         value, 
+         Perc) %>%
+  group_by(value, 
+           Perc) %>%
+  summarise(NumPat = sum(NumPat))
+  
+
+print(Perc)
+
+# add the percentages to the nodes in diagram
+sankey$x$nodes <- right_join(sankey$x$nodes, 
+                             Perc, 
+                             by = c("name" = "value"))
+print(sankey$x$nodes)
+
+
+sankey <- htmlwidgets::onRender(sankey, '
+                      function(el,x) {
+                        d3.select(el).selectAll(".node text")
+                          .text(d => d.name + " " + d.Perc)
+                      }')
+
+# view the sankey diagram
+sankey
+
+# save the sankey widget as an html
+saveWidget(sankey, 
+           file=paste0(folder,"sankey.html"))
+```
+

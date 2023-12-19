@@ -1,0 +1,359 @@
+---
+title: "Exploratory Data Analysis"
+author: "Lucie Woellenstein"
+output: pdf_document
+---
+
+Exploratory Data Analysis for any data sets analysed 
+- relevant data sets and variable names (where applicable) must be changed where indicated 
+
+```{r setup include=FALSE}
+#set working directory of the whole document (includes 3 folders: raw_data, clean_data, research) - reset for every code chunk reading
+knitr::opts_knit$set(root.dir="path/to/file") # put in correct path
+
+# load necessary libraries (these must be installed if not already)
+library("tidyverse") # loads dplyr, ggplot2, tidyr, purr, tibble, forcats
+library("rlist")
+library("inspectdf")
+library("GGally")
+library("skimr")
+library("readr")
+library("WVPlots")
+# load in the bonferroni adjustment function 'chisq.post.hoc' from research/functions folder
+source("/research/functions/bonferroni.r") # full file path
+
+```
+
+READ IN THE DATA 
+
+``` {r}
+# read in the data 
+data <- read_csv("clean_data/clean_prevent1.csv", # put correct data set being explored should be in "your/working/directory/clean_data/"
+                 col_types = cols(LACODE = col_factor(), # factorise any categorical variables
+                                  outcome = col_factor(), 
+                                  gender = col_factor(), 
+                                  REASON = col_factor()))
+
+# factorise categorical variables that were missed above
+data <- data %>%
+  mutate(PROPERTY = factor(PROPERTY), 
+         ethnicity = factor(ethnicity))
+```
+
+EXAMINE DATA SET STRUCTURE USING INSPECT
+
+```{r inspect}
+# use inspect package to inspect the data 
+
+# column types
+data %>%
+  inspect_types() %>%
+  show_plot()
+
+
+# inspect correlation coefficients of numeric columns
+data %>%
+  select(-person_id) %>% # remove person ID
+  inspect_cor() %>%
+  show_plot()
+
+# inspect imbalance in categorical columns related to outcome var, each row should have 2 dots on graph
+data %>%
+  group_by(outcome) %>%
+  inspect_imb() %>%
+  show_plot()
+
+# summarise categorical columns plot
+data %>%
+  inspect_cat() %>%
+  show_plot()
+
+# summarise categorical columns in table
+data %>%
+  inspect_cat()
+```
+
+EXAMINE ALL VARIABLES USING SKIMR PACKAGE
+
+```{r skimr}
+# use skimr package to explore data set further
+
+# provides summary statistics for different variable types
+skim(data)
+
+# provides statistics on all variables crossed to with the outcome (e.g. missing, mean)
+data %>%
+  select(-person_id) %>% # remove irrelevant person_id
+  group_by(outcome) %>%
+  skim()
+```
+
+EXAMINE THE CONTINUOUS VARIABLES 
+- histograms, density plots, summary statistics
+- correlographs between all continuous variables
+
+```{r}
+# summary statistics for continuous variables
+summary(data$APP2ACT) 
+summary(data$ACT2OUT)
+summary(data$APP2OUT)
+summary(data$ageatapp)
+
+# build histogram of continuous variables
+hist(data$APP2ACT) 
+hist(data$ACT2OUT)
+hist(data$APP2OUT)
+hist(data$ageatapp)
+
+# density graphs - check distributions of continuous variables
+plot(density(data$APP2ACT)) 
+plot(density(data$ACT2OUT))
+plot(density(data$ageatapp))
+
+# plot correlation between continuous variables using a correlogram with ggally
+# possible to do this with binary variables
+data %>%
+  select(ageatapp, 
+         APP2ACT,
+         ACT2OUT, 
+         APP2OUT) %>%
+  ggpairs(title = "Correlogram for numerical variables")
+```
+
+
+EXAMINE CORRELATION
+ - measures the strength and direction of a linear association between two variables
+ - continuous versus continuous variables (use pearson correlation)
+ - continuous versus binary predictor variables (use point biseral - i.e. "pearson")
+ - continuous versus binary outcome variable (use point biseral - i.e. "pearson" method)
+ -if any ordinal variables present, use KENDALL correlation)
+
+```{r}
+
+# POINT BISERAL CORRELATION - PEARSON CORRELATION
+# correlation between continuous variables and binary outcome data 
+cbind(
+  outcome = data$outcome,
+  homelessapp = data$made_homelessness_application,
+  ageatapp = data$ageatapp,
+  APP2OUT = data$APP2OUT,
+  APP2ACT = data$APP2ACT,
+  vulcount = data$vul_count,
+  actcount = data$activity_count
+) %>%
+  cor(method = "pearson")
+
+# correlation between binary outcome variables and binary predictor variables (vulnerability and activity variables)
+# correlation between binary predictor variables (vulnerability and activity variables)
+cbind(
+  outcome = data$outcome,
+  homelessapp = data$made_homelessness_application,
+  finvul = data$fin_vul,
+  mentalvul = data$mental_vul,
+  physvul = data$phys_vul,
+  lackvul = data$lackofsupport_vul,
+  unmetvul = data$unmetneed_vul,
+  financial = data$financial,
+  welfare = data$welfare_benefits,
+  mediation = data$mediation,
+  miscellaneous = data$miscellaneous,
+  rights = data$homelessness_rights,
+  general = data$general_housing_advice_info_assistance,
+  renting = data$renting,
+  owning = data$owning_buying,
+  health_emp_support = data$health_employment_adaptations_support_services,
+  type1 = data$activity_type_1,
+  type2 = data$activity_type_2,
+  type3 = data$activity_type_3,
+  by1 = data$activity_by_1,
+  by2 = data$activity_by_2,
+  by3 = data$activity_by_3
+) %>%
+  cor(method = "pearson")
+
+```
+
+CREATE SCATTER PLOTS
+- graphs relationship between continuous and binary outcome variable
+
+```{r}
+# set titles of each graph you want to make
+titles <- c("age vs outcome", "APP2OUT vs outcome", "APP2ACT vs outcome")
+
+# set x-axis variable for each xvar in tiles above (must be in same order)
+xvar <- c("ageatapp", "APP2OUT", "APP2ACT")
+
+# set y-axis variable - the outcome variable
+yvar <- "outcome"
+BYscatterplots <- lapply(1:length(titles), 
+                         function(x) BinaryYScatterPlot(data, 
+                                                        xvar = xvar[[x]], 
+                                                        yvar = yvar,
+                                                        title = titles[[x]]))
+print(BYscatterplots)
+# dev.off() # if plot doesn't show when printing try this
+```
+
+EXAMINE THE CATEGORICAL VARIABLES
+- cross tabulations of each categorical predictor variable with binary outcome variable
+- cross tabulations of each categorical predictor variable with each other
+
+```{r}
+
+# table for just one variable - numbers in each category
+# do for all variables if desired
+table(data$financial_assistance_advice)
+
+# plot categorical variables against each other (bar graphs)
+plot(data$gender, data$ethnicity)
+plot(data$financial_assistance_advice, data$REASON)
+
+### CROSS TABULATIONS - clues for correlation between variables ###
+
+
+# cross tabulations two categorical variables - actual numbers
+# how many of each category cross over between two categorical variables?
+data$gender %>%
+  table(data$ethnicity) %>%
+  addmargins()
+
+data$PROPERTY %>%
+  table(data$REASON) %>%
+  addmargins()
+
+# Cross tabulation of two categorical variables - proportions instead
+# measure for all pairs of categorical variables
+# helps spot collinearity
+as.data.frame(data$financial_assistance_advice %>% # becomes the variable in first column
+                table(data$REASON) %>% # becomes variable in second column
+                prop.table(margin = 2) %>% # margin = 2 => proportion of row category (financial assistance) in the column category (reason)
+                round(digits = 2)*100
+              )
+
+### create cross tabulations of each categorical variable with the outcome variable to be modelled later on ###
+
+# create vector of all categorical variables in data set
+cat_vars <- c("PROPERTY", 
+              "outcome", 
+              "gender", 
+              "REASON", 
+              "ageatapp", 
+              "LACODE", 
+              "ethnicity", 
+              "fin_vul", 
+              "phys_vul", 
+              "mental_vul", 
+              "unmetneed_vul", 
+              "lackofsupport_vul", 
+              "refused_vul", 
+              "new_previous_approach", 
+              "made_homelessness_application", 
+              "time_error", 
+              "activity_type_1", 
+              "activity_type_2", 
+              "activity_type_3",
+              "financial_assistance_advice", 
+              "general_housing_advice_tenancy_rights_advice", 
+              "client_informed_of_rights_under_homelessness_legislation", 
+              "rent_repairs_referrals_neogtiation_with_landlords", 
+              "other", 
+              "mediation_outreach", 
+              "referral_to_health_social_work_employment_services", 
+              "tenancy_social_care_support_adaptations_to_property",
+              "mortgage_homeownership_advice", 
+              "help_to_remain_in_accommodation", 
+              "activity_by_1", 
+              "activity_by_3", 
+              "activity_by_2", 
+              "SUPPORT")
+
+# use lapply function to create cross tabulations of each variable in cat_vars and the outcome variable
+outcome_tables <- lapply(data[, cat_vars], 
+                         function(x) round(100 * prop.table(table(data$outcome, # repeat and replace with each variable in cat_vars
+                                                                  x, # each of the variables in cat_vars
+                                                                  exclude = NA), 
+                                                            margin = 2), 
+                                           digits = 1))
+outcome_tables
+
+
+# repeat above process to make cross tabulations between each of the non binary categorical predictor variables 
+
+```
+
+EXAMINE CORRELATION BETWEEN CATEGORICAL VARIABLES
+
+- use Chi Square test and Bonferroni test (function written in bonferroni.r called in set up chunk)
+- Chi square test for independence checking. This will let you know if there is a correlation, but not the direction or strength
+- Bonferroni test lets you check in the correlation is between every category of a variable (i.e. which categories are significant)
+- Larger numbers in the Chi square test mean no relationship 
+- Smaller numbers means there is a relationship
+- P-value indicates the probability of getting the observed counts assuming that the two variables are not related (counts under null hypothesis)
+- the smaller the chi square p-value the more surprising it would be to get the observed counts if the null hypothesis was true (i.e. smaller the p-vaue, more likely the two are associated with each other)
+
+```{r error=FALSE}
+
+# (significance <0.05)
+
+# map the chisq.test to the cross tabulations created above
+outcome_X2 <- map(outcome_tables, chisq.test)
+chisq.test(outcome_tables$ethnicity)
+
+print(outcome_X2)
+
+# repeat the chisq.test with cross tabulations between non binary categorical predictor variables
+
+# BONFERRONI TEST
+
+# usual accepted p value
+p <- 0.05 
+
+### Bonferroni adjustment p values for non binary categorical variables
+
+
+# number of tests run - the number of pairs between the categories of two variables that showed correlation in chi square test
+num_tests <- c(45, 66, 106) # adjust accordingly to number of pairs
+
+# adjusted p value for that number of categories in a variable
+adjp <- c(
+  "adjp9", 
+  "adjp12", 
+  "adjp16"
+  ) 
+
+#  adjusted p-values to compare against in the bonferroni test below
+adjp <- cbind(
+  adjp, 
+  p / num_tests
+  )
+
+# perform bonferroni test
+
+# extract the observed values from the chi.test above
+obs <- lapply(
+  outcome_X2, # replace with each individual chi square test above (e.g. between two categorical predictor variables)
+  function(x) x$observed
+  )
+
+# extract the observations for each categorical variable that showed correlation with another categorical variable (here compared with outcome) in the chi square test above
+observations <- list(
+  reason = obs$REASON, 
+  property = obs$PROPERTY, 
+  ethnicity = obs$ethnicity
+  )
+
+
+# perform the bonferroni test on each of the observations pulled out above
+outcome_bonferroni_tests <- lapply(
+  observations, 
+  # chisq.post.hoc comes from the bonferroni.r function written and called in during set up
+  function(x) chisq.post.hoc(x, 
+                             control = "bonferroni", 
+                             popsInRows = FALSE)[, 1:2]
+  )
+
+
+# if the raw.p value (bonferroni significance) printed below is higher than the adjusted p-value for that number of pairs (adj values above),
+# the relationship between those two pairs are not significant
+print(outcome_bonferroni_tests)
+```

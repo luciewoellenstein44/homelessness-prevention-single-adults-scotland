@@ -1,0 +1,369 @@
+---
+title: "descriptive statistics"
+author: "Lucie Woellenstein"
+output: html_document
+---
+
+This script produces:
+  - a table summarising the descriptive statistics of a data set by outcome class
+  - box plots of continuous variables
+  - scatter plots of continuous variables versus outcome variables    
+
+```{r setup, include=FALSE}
+#set working directory of the whole document (includes 3 folders: raw_data, clean_data, research) - reset for every code chunk reading
+knitr::opts_knit$set(root.dir="path/to/file") # put in correct path
+
+# load libraries (these must be installed if not already)
+library("tidyverse") 
+library("rlist")
+library("inspectdf")
+library("WVPlots")
+
+# create object for folder to write to 'research/report/' should be inside working directory
+folder <- "/research/report/"
+```
+
+WRITE ANY FUNCTIONS REQUIRED IN SCRIPT 
+
+```{r}
+# function to get rounded numbers to nearest 5 & percentage by grouped var
+get_prop_5 <- function(var, data) {
+  data %>%
+    group_by(.[var]) %>%
+    summarize(NumPat = round(n()/5)*5,  # round count in group to the nearest 5 
+              prop=round(sum(NumPat)/nrow(.)*100,2)) %>% # percentage based on the rounded NumPat
+    # combine rounded count and percentage and add % sign to figure in column N
+    mutate(N = paste0(as.character(NumPat), 
+                      sep=" (",as.character(prop),sep="%)"),
+           NumPat = NULL,
+           prop = NULL)
+}
+
+
+# function to reshape proportion table 
+# puts binary outcome classes into the two columns taking the N(%) for each predictor variable as their value
+reshape_prop <- function(outcome, table, prefix) {
+  outcome <-enquo(outcome) # put quotes around value so it can be read
+  table %>%
+    pivot_longer(c(-N,
+                   -!!outcome),  # !! means to take quotes off, otherwise an error is thrown
+                 names_to = "Variable",
+                 values_to = "Value") %>%
+    na.omit() %>%
+    pivot_wider(names_from = !!outcome,
+                names_prefix = prefix,
+                values_from = N)  %>%
+    filter(Value != "NO")
+}
+
+# function gets mean and standard deviation of continuous variables
+get_mean_sd <- function(outcome, input, var, data) {
+  outcome <- enquo(outcome) # puts quotes around value so it can be read
+  var <- enquo(var)
+  # get mean of variable per outcome class
+  mean <- data %>% 
+    filter(!!outcome==input) %>%  # !! takes quotes off again
+    pull(!!var) %>% 
+    mean() %>% 
+    round(.,2)
+  # calculate sd of variable per outcome class
+  sd <- data %>% 
+    filter(!!outcome==input) %>% 
+    pull(!!var) %>% 
+    sd() %>% 
+    round(.,2)
+  # paste together the mean and sd in ()
+  output <- paste0(as.character(mean), 
+                   sep=" (", as.character(sd), 
+                   sep=")")
+  output
+}
+
+# function reformats property variable categories to better names for table
+reformat_PREVENT1 <- function(df) {
+  df <- df %>%
+    mutate(PROPERTY = as.factor(
+    recode(
+      PROPERTY,
+      "accomm_tied_employment_armed_forces" = "Service tied accommodation",
+      "family" = "Family",
+      "hostel_B&B" = "Hostels & B&Bs",
+      "roofless" = "Roofless",
+      "friends_partners" = "Friends & partners",
+      "home_ownership" = "Home ownership",
+      "hospital" = "Hospital",
+      "LA_tenancy" = "LA tenancy",
+      "lodger" = "Lodger",
+      "other" = "Other",
+      "prison" = "Prison",
+      "PRS_tenancy" = "PRS tenancy",
+      "RSL_tenancy" = "RSL tenancy",
+      "sofa_surfing" = "Sofa-surfing",
+      "supported_accom" = "Supported accommodation",
+      "unknown_refused" = "Unknown or refused"
+    )
+  ))
+}
+
+```
+
+LOAD AND PREPARE DATA 
+
+```{r}
+# read data from /clean_data/ folder in working directory
+data <- read_csv("/clean_data/clean_data.csv")
+
+# prepare data 
+# set variables to NULL that should be removed, change category names for binary variables, factorise categorical vars
+data <- data %>%
+  mutate(refused_vul = NULL, 
+         time_error = NULL, 
+         RSNSCT = as.factor(RSNSCT),
+         ETHNICITY = as.factor(ethnicity),
+         ethnicity = NULL,
+         REASON = as.factor(REASON),
+         PROPERTY = as.factor(PROPERTY),
+         GENDER = as.factor(ifelse(gender==1, 
+                                   "male", 
+                                   "female")),
+         gender = NULL,
+         SUPPORT = as.factor(SUPPORT),
+         other_activity = other,
+         other = NULL,
+         previous_approach = new_previous_approach,# give better name
+         new_previous_approach = NULL,
+         made_homelessness_application = as.factor(ifelse(made_homelessness_application == TRUE, 
+                                                          "YES", 
+                                                          "NO")),
+         fin_vul = as.factor(ifelse(fin_vul == TRUE, 
+                                    "YES",
+                                    "NO")),
+         phys_vul = as.factor(ifelse(phys_vul == TRUE, 
+                                     "YES", 
+                                     "NO")),
+         mental_vul = as.factor(ifelse(mental_vul == TRUE, 
+                                       "YES", 
+                                       "NO")),
+         unmetneed_vul = as.factor(ifelse(unmetneed_vul == TRUE, 
+                                          "YES", 
+                                          "NO")),
+         lackofsupport_vul = as.factor(ifelse(lackofsupport_vul == TRUE, 
+                                              "YES", 
+                                              "NO")))
+
+# check column types are as would be expected
+data %>% 
+  inspect_types %>% 
+  show_plot()
+
+# get rounded count and percentage n(%) for outcome variable - to know numbers in each class (required below)
+get_prop_5("outcome", data)
+```
+
+CREATE DESCRIPTIVE STATISTICS TABLE
+ - descriptive statistics by outcome class 
+ - categorical variables include count per nearest 5 and percentage in each outcome class
+ - continuous variables have mean and standard deviation per outcome class
+
+```{r}
+# make table of all categorical descriptive variables n(%) per outcome class
+table <- rbind(
+  get_prop_5(var = c("outcome", 
+                     "GENDER"),
+             data = data),
+  get_prop_5(var = c("outcome",
+                     "ETHNICITY"), 
+             data = data),
+  get_prop_5(var = c("outcome",
+                     "PROPERTY"), 
+             data = data),
+  get_prop_5(var = c("outcome",
+                     "REASON"), 
+             data = data),
+  get_prop_5(var = c("outcome",
+                     "RSNSCT"), 
+             data = data),
+  get_prop_5(var = c("outcome",
+                     "fin_vul"),
+             data = data),
+  get_prop_5(var = c("outcome",
+                     "phys_vul"), 
+             data = data),
+  get_prop_5(var = c("outcome",
+                     "mental_vul"),
+             data = data),
+  get_prop_5(var = c("outcome",
+                     "unmetneed_vul"), 
+             data = data),
+  get_prop_5(var = c("outcome",
+                     "lackofsupport_vul"), 
+             data = data)
+  ) %>%
+  reshape_prop(outcome = outcome,
+               ., 
+               prefix = "Outcome_") # prefix should be the outcome variable name to appear in column header
+
+# make table of all continuous vars mean(SD) per outcome class
+cont_avgs <- data.frame(cbind(
+  Variable = c("AGEATAPP (years)",  
+               "APP2OUT (days)", 
+               "ACTIVITY_COUNT", 
+               "VULNERABILITY_COUNT"),
+  Value = "mean (SD)",
+  unsuccessful = c(get_mean_sd(outcome = outcome, 
+                               input = "unsuccessful", # the "successful" outcome class
+                               var = ageatapp, 
+                               data = data),
+                   get_mean_sd(outcome = outcome, 
+                               input = "unsuccessful",
+                               var = APP2OUT, 
+                               data = data),
+                   get_mean_sd(outcome = outcome, 
+                               input = "unsuccessful",  # the "unsuccessful" outcome class
+                               var = activity_count, 
+                               data = data),
+                   get_mean_sd(outcome = outcome, 
+                               input = "unsuccessful",
+                               var = vul_count, 
+                               data = data)),
+  successful = c(get_mean_sd(outcome = outcome,
+                             input = "successful",
+                              var = ageatapp, 
+                              data = data),
+                 get_mean_sd(outcome = outcome, 
+                             input = "successful", 
+                             var = APP2OUT, 
+                             data =data),
+                get_mean_sd(outcome = outcome, 
+                            input = "successful",
+                            var = activity_count,
+                            data = data),
+                 get_mean_sd(outcome = outcome, 
+                             input = "successful", 
+                             var = vul_count,
+                             data = data))))
+
+# bind together for a descriptive statistics table
+table <- table %>%
+  rbind(cont_avgs) %>%
+  # rename columns "outcome variable - class (n=)"
+  # fill in n= with stats from calculation in get_prop_5("outcome", data)
+  rename("Outcome-unsuccessful (n=)" = unsuccessful) %>%
+  rename("Outcome-successful (n=)" = successful) 
+
+# view table to check it's good
+print(table)  
+
+# write table to research/report/ folder in working directory
+write.csv(table, 
+          file.path(folder, "descriptive_stats.csv"), 
+          row.names = F)
+
+```
+
+CREATE BOX PLOTS OF TIME VARIABLES
+
+```{r}
+# pivot longer data set - the time variables that were used 
+longer <- data %>%
+  pivot_longer(c(APP2ACT, 
+                 ACT2OUT, 
+                 APP2OUT),
+               names_to = "var",
+               values_to = "value")
+
+# set theme for plot (this one just changes the title)
+mytheme <- theme(plot.title = element_text(size = 15, 
+                                           hjust = 0.5))
+# boxplots without outliers
+p <- ggplot(longer, 
+            aes(x = reorder(var, value), 
+                y = value)) +
+  geom_boxplot(outlier.shape = NA) +
+  mytheme +
+  # set the limits of the y-axis (should be)
+  scale_y_continuous(limits = quantile(x = longer$value, 
+                                       probs = c(0, 0.65))) + 
+  ggtitle("Distribution of Time Variables (outliers removed)") +
+  labs(y = "Time (days)",
+       x = "Variable")
+
+# view plot
+p
+
+ggsave(file.path(folder, "boxplots"),
+      plot = p,
+      device = png())
+```
+
+CREATING SCATTER PLOTS
+ - for continuous variables and the outcome variable
+ - first the outliers are found and removed
+
+```{r}
+# find Q1 Q3 IQR for variable in "successful" outcome class
+summary(data %>% 
+          filter(outcome == "successful") %>%
+          select(APP2OUT))
+# inner_upper1 <- # inner upper fence calculation: Q3 +1.5(IQR) 
+# inner lower wasn't required here
+
+# find Q1 Q2 IQR for variable in "unsuccessful" outcome class
+summary(data %>% 
+          filter(outcome == "unsuccessful") %>%
+          select(APP2OUT))
+# inner_upper2 <- # inner upper fence calculation: Q3 +1.5(IQR)
+# inner lower wasn't required here
+
+# remove minor and major outliers from data set for scatter plots in next section
+data_out <- data %>%
+  filter(outcome =="successful" & APP2OUT <= inner_upper1|
+           outcome=="unsuccessful" & APP2OUT <= inner_upper2)
+```
+
+- now the Binary Y scatterplots are made for continuous variables versus outcome 
+
+```{r}
+# binary y scatter plots show the relationship between a continuous x independent variable and a binary y variable
+scatter <- data_out %>%
+  # must turn outcome variable to numeric or BinaryYScatterPlot won't work
+  mutate(outcome = ifelse(outcome == "successful", 
+                          1, 
+                          0))
+
+
+### MAKE SCATTER PLOTS 
+
+# lapply was used here as there were two outcome variables in data set only one (outcome) included here
+# lapply code retained for purposes of showing how to use it
+
+# set y-axis name
+yvar <- c("outcome")
+
+# make list of the data frames of data without outliers and binary variable turned to numeric
+frames <- list(scatter)
+
+# plot scatter plots for all outcome variables
+BYscatterplots <-
+  lapply(1:length(titles), 
+         function(x) BinaryYScatterPlot(frames[[x]],
+                                        xvar = "APP2OUT",
+                                        yvar = yvar[[x]],
+                                        use_glm = TRUE)
+         )
+
+# name the graph in the list - more useful if multiple scatter plots were created
+names(BYscatterplots) <- c("scatterplot1")
+
+# view scatter plots
+BYscatterplots
+
+# save scatter plot
+lapply(names(BYscatterplots), 
+       function(x) ggsave(filename = file.path(folder, x),
+                          plot = BYscatterplots[[x]],
+                          device = png())
+       )
+
+# redo above with all continuous variables
+```
