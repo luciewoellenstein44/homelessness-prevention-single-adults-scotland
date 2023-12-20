@@ -1,10 +1,20 @@
 ---
 title: "sankey diagrams"
 author: "Lucie Woellenstein"
-output: html_document
+output: 
+  html_document:
+    theme: spacelab
+    toc: true
+    toc_float: true
+    df_print: paged
+    highlight: haddock
+    code_folding: hide
 ---
 
-This script creates a Sankey Diagram showing the flow from original property accommodation types of HO approaches to the final outcome property accommodation type.
+This script creates a Sankey Diagram showing the flow from original 
+property accommodation types of HO approaches to the final outcome property accommodation type.
+This sankey diagram was built on the raw_data (unavailable here due to data sensitivity)
+and clean_data (fake synthetic data example under clean_data folder in main)
 
 SET UP 
 
@@ -123,7 +133,7 @@ READ IN RAW UNCLEANED DATA
 ```{r}
 
 # read in raw data change the unique id name get just the outcome and person id and remove duplicates
-raw_data <- read_csv("/raw_data/file.csv")
+raw_data <- read_csv("/raw_data/raw_data.csv")
 
 # rename person id column so it has no spaces
 names(raw_data)[1] <- 'person_id'
