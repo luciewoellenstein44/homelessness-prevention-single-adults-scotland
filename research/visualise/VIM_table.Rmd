@@ -1,0 +1,202 @@
+---
+title: "VIM Table"
+author: "Lucie Woellenstein"
+output: 
+  html_document:
+    theme: spacelab
+    toc: true
+    toc_float: true
+    df_print: paged
+    highlight: haddock
+    code_folding: hide
+---
+
+## Introduction 
+
+This R markdown script makes a table of all Variable Importance Measures (VIMs) that appeared in any of the
+models' top five most important variables (models built in /research/analysis/prediction_models.Rmd). 
+
+Example data that can be used to make this graph is available under research/visualise/data/VIMs/. 
+The example are the VIMs from the models classifying successful and unsuccessful Housing Options outcomes
+in the Glasgow PREVENT1 sample. 
+
+The raw and cleaned data that the models were built on is not made available in this repository due to data sensitivity / confidentiality reasons. 
+
+A fake synthetic example of the data set is available in /clean_data/clean_data.csv.
+
+The following chunk loads the libraries necessary. Install these using install.packages("package name").
+
+```{r}
+library("tidyverse")
+library("gridExtra")
+library("grid")
+```
+
+The following chunk builds any functions required later on. 
+```{r}
+# rename category names to better names for visualisation
+# this is specific to the data that is loaded in the next chunk 
+reformat_PREVENT1 <- function(VIM_df) {
+  VIM_df <- VIM_df %>%
+    mutate(rowname = as.factor(
+      recode(
+        rowname,
+        "PROPERTYaccomm_tied_employment_armed_forces"	=	"PROPERTY Service tied accommodation",
+        "PROPERTYfamily"	=	"PROPERTY Family"	,
+        "PROPERTYhostel_B&B"	=	"PROPERTY Hostels & B&Bs",
+        "PROPERTYroofless"	=	"PROPERTY Roofless"	,
+        "PROPERTYfriends_partners"	=	"PROPERTY Friends & partners",
+        "PROPERTYhome_ownership"	=	"PROPERTY Home ownership",
+        "PROPERTYhospital"	=	"PROPERTY Hospital",
+        "PROPERTYLA_tenancy"	=	"PROPERTY LA tenancy",
+        "PROPERTYlodger"	=	"PROPERTY Lodger",
+        "PROPERTYother"	=	"PROPERTY Other",
+        "PROPERTYprison"	=	"PROPERTY Prison",
+        "PROPERTYPRS_tenancy"	=	"PROPERTY PRS tenancy",
+        "PROPERTYRSL_tenancy"	=	"PROPERTY RSL tenancy",
+        "PROPERTYsofa_surfing"	=	"PROPERTY Sofa-surfing",
+        "PROPERTYsupported_accom"	=	"PROPERTY Supported accommodation",
+        "PROPERTYunknown_refused"	=	"PROPERTY Unknown or refused",
+        "REASONasked_to_leave"	=	"REASON Asked to leave"	,
+        "REASONdischarge_prison_hospital_institution"	=	"REASON Discharge"	,
+        "REASONdispute_household_relationship_breakdown_non_violent"	=	"REASON Non-violent dispute"	,
+        "REASONdispute_household_violent_abusive"	=	"REASON Violent abusive dispute"	,
+        "REASONeviction_UK_borders_agency"	=	"REASON Eviction UK borders"	,
+        "REASONfleeing_non_domestic_abuse_hate_crime_antisocial_behaviour"	=	"REASON Fleeing"	,
+        "REASONgeneral_housing_options_advice"	=	"REASON HO advice"	,
+        "REASONharrassment"	=	"REASON Harassment"	,
+        "REASONother_financial_difficulties_benefit_issues"	=	"REASON Financial / benefits issues"	,
+        "REASONother_landlord_action_resulting_termination"	=	"REASON Landlord action"	,
+        "REASONother_reason_for_leaving_accom"	=	"REASON Other leaving accom"	,
+        "REASONother_reason_loss_eviction_reposession"	=	"REASON Other loss accom"	,
+        "REASONovercrowding"	=	"REASON Overcrowding"	,
+        "REASONproperty_condition_or_accom_unsuitable"	=	"REASON Condition unsuitable"	,
+        "REASONrisk_or_loss_service_tied_accommodation"	=	"REASON Service tied accom"	,
+        "REASONtermination_tenancy_mortage_rent_arrears_default"	=	"REASON Rent arrears / default"	,
+        "REASONapplicant_terminated_secure_accom"	=	"REASON Applicant termination"	,
+        "financial_assistance_adviceTRUE"	=	"ACTIVITY Financial assistance"	,
+        "client_informed_of_rights_under_homelessness_legislationTRUE"	=	"ACTIVITY Homelessness rights"	,
+        "general_housing_advice_tenancy_rights_adviceTRUE"	=	"ACTIVITY HO advice"	,
+        "referral_to_health_social_work_employment_servicesTRUE"	=	"ACTIVITY Referral services"	,
+        "mediation_outreachTRUE"	=	"ACTIVITY Mediation"	,
+        "help_to_move_to_other_propertyTRUE"	=	"ACTIVITY Help moving"	,
+        "rent_repairs_referrals_neogtiation_with_landlordsTRUE"	=	"ACTIVITY Landlord negotiations"	,
+        "help_to_remain_in_accommodationTRUE"	=	"ACTIVITY Help remaining"	,
+        "other_activityTRUE"	=	"ACTIVITY Other"	,
+        "tenancy_social_care_support_adaptations_to_propertyTRUE"	=	"ACTIVITY Social care & adaptations"	,
+        "mortgage_homeownership_adviceTRUE"	=	"ACTIVITY Home ownership advice"	,
+        "ethnicitywhite_scottish"	=	"ETHNICITY White Scottish"	,
+        "ethnicitywhite_british"	=	"ETHNICITY White British" 	,
+        "ethnicityother_white"	=	"ETHNICITY Other White"	,
+        "ethnicitywhite_polish"	=	"ETHNICITY White Polish"	,
+        "ethnicityasian"	=	"ETHNICITY Asian"	,
+        "ethnicityother"	=	"ETHNICITY Other"	,
+        "ethnicitynot_known"	=	"ETHNICITY Not known"	,
+        "ethnicitycarribean_black"	=	"ETHNICITY Caribbean / Black"	,
+        "ethnicitymixed"	=	"ETHNICITY Mixed"	,
+        "ethnicityrefused"	=	"ETHNCITIY Refused",
+        "activity_type_2TRUE"	=	"ACTIVITY TYPE 2"		,
+        "activity_type_1TRUE"	=	"ACTIVITY TYPE 1"		,
+        "activity_type_3TRUE"	=	"ACTIVITY TYPE 3"		,
+        "activity_by_2TRUE"	=	"ACTIVITY BY 2"	,
+        "activity_by_1TRUE"	=	"ACTIVITY BY 1"	,
+        "activity_by_3TRUE"	=	"ACTIVITY BY 3"	,
+        "RSNSCThave_to_leave_accommodation_household"	=	"RSNSCT Need to leave accom"	,
+        "RSNSCTproperty_may_no_longer_be_suitable_available_in_future"	=	"RSNSCT Prop unavailable in future"	,
+        "vul_count"	=	"VULNERABILITY COUNT"	,
+        "mental_vulTRUE"	=	"VULNERABILITY Mental health"	,
+        "lackofsupport_vulTRUE"	=	"VULNERABILITY Lack of support"	,
+        "fin_vulTRUE"	=	"VULNERABILITY Financial"	,
+        "phys_vulTRUE"	=	"VULNERABILITY Physical"	,
+        "unmetneed_vulTRUE"	=	"VULNERABILITY Unmet need"	,
+        "refused_vulTRUE" = "VULNERABILITY refused",
+        "SUPPORT1" = "SUPPORT Yes",
+        "SUPPORT2" = "SUPPORT Not known",
+        "gender2" = "GENDER Female",
+        "ageatapp" = "AGEATAPP",
+        "previous_approachTRUE" = "Previous approach",
+        "activity_count" = "ACTIVITY COUNT"
+      )
+    ))
+}
+
+# function pulls out the top 5 most important variables in each model
+pull_top <- function(VIMdf, n) {
+  VIMdf %>%
+    mutate(Variable = forcats::fct_inorder(rowname),
+           rowname = NULL) %>%
+    head(5) %>% 
+    pull(Variable) %>%
+    as.character()
+}
+destfilepath <- "/homelessness-prevention-single-adults-scotland/research/report/"
+```
+
+Load in the data
+
+```{r}
+# set working directory for this chunk only 
+setwd("/homelessness-prevention-single-adults-scotland/research/visualise/data/VIMs/")
+# list the csv files in the folder
+# ensure that the folder only includes csv that are needed for this script
+folder <- list.files(pattern="*.csv")
+# read all csv into a data frame
+VIMdfs <- lapply(folder, 
+                 function(x) 
+                   read_csv(x))
+
+# use this naming convention for the top 5 table 
+names(VIMdfs) <- c("AdaboostM1", "Bag-Adaboost", "ENet", "LR", "RF", "XGB")
+VIMdfs
+
+# reformat the data frames to change category names using custom function above
+VIMdfs <- lapply(VIMdfs, 
+                 reformat_PREVENT1)
+# view the VIM data frames
+VIMdfs
+```
+
+
+```{r top 5 table}
+# apply custom pull_top function to all VIMdfs
+# makes distinct list of all of them VIMs in any of the models' top five most important variables
+top5 <- lapply(VIMdfs, 
+               pull_top, 
+               n = 5)
+
+# turn list into a vector
+top5 <- c(top5[[1]], top5[[2]], top5[[3]], top5[[4]], top5[[5]], top5[[6]])
+
+# turn to a dataframe table
+table <- as.data.frame(table(top5))
+
+# name the columns
+names(table) <- c("Variable", "Appearances")
+
+# add VIMs to the data frame
+table <- table %>% 
+  left_join(., VIMdfs$ENet, by=c("Variable"="rowname")) %>% 
+  left_join(., VIMdfs$LR, by=c("Variable"="rowname")) %>%
+  left_join(.,VIMdfs$AdaboostM1, by=c("Variable"="rowname")) %>%
+  left_join(., VIMdfs$`Bag-Adaboost`, by=c("Variable"="rowname")) %>% 
+  left_join(., VIMdfs$RF, by=c("Variable"="rowname")) %>% 
+  left_join(., VIMdfs$XGB, by=c("Variable"="rowname")) 
+
+# name columns with the additional columns that have been added
+names(table) <- c("Variable", "Appearances", "ENet", "LR mRMR", "AdaboostM1", "Bag-Adaboost", "RF", "XGB")
+
+# round the VIMs to one decimal point
+table <- table %>% 
+  mutate_at(vars(-c(Variable, Appearances)), funs(round(.,1)))
+
+# order by number of appearances
+table <- table %>%
+  arrange(desc(Appearances))
+
+# view the table
+table
+
+# save the csv of the table
+write_csv(table, 
+          file = file.path(destfilepath, "/top_5_VIMs_table.csv"))
+```
