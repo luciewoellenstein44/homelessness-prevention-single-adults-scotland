@@ -12,10 +12,16 @@ output:
 ---
 ## Introduction
 
-This rmarkdown script produces Odds Ratio plots. Here it was done for the Glasgow sample of PREVENT1 data set. 
+This rmarkdown script produces Odds Ratio plots. 
+
 The odds ratios (ORs) came from the Logistic Regression (LR) and Elastic Net (ENet) models produced by  '/research/analysis/prediction_models.rmd'. 
-The OR graph only includes ORs that had significant p-values in the LR model and were included 
+
+The OR plot only includes ORs that had significant p-values in the LR model and were included 
 in both the LR and ENet models. 
+
+The example data that can be used to run this script is in "/research/visualise/data/".
+This data holds the ORs for mdoels classifying successful and unsuccessful Housing Options outcomes 
+in the Glasgow PREVENT1 data set.
 
 The following chunk sets the baseline characteristics for the plot
 
@@ -50,7 +56,7 @@ options(digits = 2, scipen = 999)
 
 ```{r}
 #Import
-or_data <- read_excel("data/GLA_HOO_OR.xlsm", # this excel file has LR and ENet coefficients and ORs. Data folder is inside visualise folder
+or_data <- read_excel("data/ORs.xlsm", # this excel file has LR and ENet coefficients and ORs. Data folder is inside visualise folder
                       sheet = "OR graph") %>% # this is the correct tab on the excel file with just the ORs to include in the graph
   #assign true NA values
   mutate(across(Enet:upper, ~na_if(.x, "NA"))) %>% 
@@ -258,7 +264,11 @@ combined
 ```
 
 ```{r, eval=FALSE}
-ggsave("or_plot_GLAHOO.png", combined, width = 15, height = 22, 
+# save the image in the report folder
+ggsave("homelessness-prevention-single-adults-scotland/research/report/or_plot.png", 
+       combined, 
+       width = 15, 
+       height = 22, 
        bg = "white")
 ```
 
