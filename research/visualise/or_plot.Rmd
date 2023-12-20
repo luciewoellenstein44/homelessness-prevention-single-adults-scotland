@@ -13,7 +13,10 @@ output:
 ---
 ## Introduction
 
-This rmarkdown script produces Odds Ratio plots. Here it was done for the Glasgow sample of PREVENT1 data set. The odds ratios (ORs) came from the Logistic Regression (LR) and Elastic Net (ENet) models produced by  '/research/analysis/prediction_models.rmd'. The OR graph only includes ORs that had significant p-values in the LR model and were included in both the LR and ENet models. 
+This rmarkdown script produces Odds Ratio plots. Here it was done for the Glasgow sample of PREVENT1 data set. 
+The odds ratios (ORs) came from the Logistic Regression (LR) and Elastic Net (ENet) models produced by  '/research/analysis/prediction_models.rmd'. 
+The OR graph only includes ORs that had significant p-values in the LR model and were included 
+in both the LR and ENet models. 
 
 The following chunk sets the baseline characteristics for the plot
 
