@@ -10,7 +10,7 @@ SET UP
 
 ```{r setup, include=FALSE}
 #set working directory of the whole document (includes 3 folders: raw_data, clean_data, research) - reset for every code chunk reading
-knitr::opts_knit$set(root.dir="path/to/file") # put in correct path
+knitr::opts_knit$set(root.dir="path/to/file") # put in correct path to working directory ('homelessness-prevention-single-adults-scotland')
 
 # load necessary libraries (these must be installed if not already)
 library("tidyverse")
