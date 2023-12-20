@@ -13,7 +13,15 @@ output:
 
 ## Introduction
 
-This R markdown script graphs the Variable Importance Measures (VIMs) for all the models that were created in /research/analysis/prediction_models.Rmd. As with the other visualisation scripts (or_plot, sankey_diagrams, descriptive statistics), this example was run on the VIMs of the models run on the Glasgow PREVENT1 data set. This data set is not made available due to data sensitivity / confidentiality reasons. A fake synthetic example of the data set is available here /clean_data/clean_data.csv.
+This R markdown script graph the top 20 Variable Importance Measures (VIMs) in the models built in /research/analysis/prediction_models.Rmd). 
+
+Example data that can be used to make this graph is available under research/visualise/data/VIMs/. 
+The example are the VIMs from the models classifying successful and unsuccessful Housing Options outcomes
+in the Glasgow PREVENT1 sample. 
+
+The raw and cleaned data that the models were built on is not made available in this repository 
+due to data sensitivity / confidentiality reasons. 
+A fake synthetic example of the data set is available in /clean_data/clean_data.csv.
 
 The following chunk loads the libraries necessary. Install these using install.packages("package name").
 
