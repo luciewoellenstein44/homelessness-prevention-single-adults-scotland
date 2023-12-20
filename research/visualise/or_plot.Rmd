@@ -1,7 +1,6 @@
 ---
-title: "OR plot GLA HOO"
+title: "OR plot"
 author: "Lucie Woellenstein"
-date: "2023-07-07"
 output: 
   html_document:
     theme: spacelab
