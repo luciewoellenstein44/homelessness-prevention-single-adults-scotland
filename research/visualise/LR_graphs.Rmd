@@ -87,7 +87,7 @@ graph
 
 ```{r}
 # save the graph in the directory folder chosen 
-ggsave("/homelessness-prevention-single-adults-scotland/LR_metrics.png", 
+ggsave("/homelessness-prevention-single-adults-scotland/research/LR_metrics.png", 
        plot = graph, 
        width = 12, 
        height = 9,
