@@ -1,0 +1,95 @@
+---
+title: "LR graphs"
+author: "Lucie Woellenstein"
+output: 
+  html_document:
+    theme: spacelab
+    toc: true
+    toc_float: true
+    df_print: paged
+    highlight: haddock
+    code_folding: hide
+---
+
+## Introduction
+
+This R markdown script is used to graph performance metrics of each of the Logistic Regression (LR)
+models built in "/research/analysis/prediction_models.Rmd".
+
+These LR models were built with the maximum relevance minimum redundancy feature selection methods, 
+meaning as many models were built as there were predictor variables (K / features) in the data set. 
+Each model had one additional variable in it. 
+
+The example data that can be used to run this script is found in "/research/visualise/data/". 
+
+This first chunk loads the packages that we will need
+```{r}
+# load libraries needed
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(magrittr))
+suppressPackageStartupMessages(library(readxl))
+suppressPackageStartupMessages(library(janitor))
+suppressPackageStartupMessages(library(ggthemes))
+suppressPackageStartupMessages(library(socviz))
+suppressPackageStartupMessages(library(patchwork))
+```
+
+The next chunk builds custom functions required to build the graph 
+
+```{r}
+# write custom function to graph all performance metrics for each K number of features in the LR model
+LR_graph <- function(df, title, best) {
+  df %>%
+    ggplot(mapping = aes(x = K, y = value, group = variable)) +
+    theme_minimal() +
+    scale_color_manual(values = c("red", "blue", "dark green", "hot pink", "yellow")) +
+   geom_line(aes(color = variable)) + 
+   labs(title = title,
+        y = "Metrics") +
+    theme(plot.title = element_text(size=14)) +
+    scale_x_continuous(name = "K: Number of Features in Model",
+                       minor_breaks = seq(1, 35, 1)) +
+    scale_y_continuous(limits = c(0,1),
+                       breaks = c(0,.20,.40,.60,.80,.100)) +
+    guides(col = guide_legend("Performance Metric")) + 
+    geom_vline(xintercept = best, 
+               color = "grey", 
+               linetype = "longdash") +
+    theme(legend.position = "none") 
+}
+```
+
+Load in the data
+
+```{r}
+# read in the csv of LR performance metrics. 
+# the current script must be in the same folder where data is found (/research/visualise/)
+df <- read_csv("/data/LR_metrics.csv")
+
+# manipulate the data into long form for graphing
+df <- df %>%
+  dplyr::select(K, F1, Accuracy, AUROC, Sensitivity, Specificity) %>%
+  gather(key = "variable", 
+         value = "value", 
+         - K)
+```
+
+
+```{r}
+# use custom function to graph metics, remember to put in the optimal k for the dashed line
+graph <- LR_graph(df = df, 
+                  title= "Glasgow", 
+                  best = 23)
+
+# view the graph 
+graph
+```
+
+```{r}
+# save the graph in the directory folder chosen 
+ggsave("/homelessness-prevention-single-adults-scotland/LR_metrics.png", 
+       plot = graph, 
+       width = 12, 
+       height = 9,
+       bg="white")
+```
