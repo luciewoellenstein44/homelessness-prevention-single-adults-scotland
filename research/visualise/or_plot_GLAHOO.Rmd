@@ -1,0 +1,265 @@
+---
+title: "OR plot GLA HOO"
+author: "Lucie Woellenstein"
+date: "2023-07-07"
+output: 
+  html_document:
+    theme: spacelab
+    toc: true
+    toc_float: true
+    df_print: paged
+    highlight: haddock
+    code_folding: hide
+---
+
+```{r}
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(magrittr))
+suppressPackageStartupMessages(library(readxl))
+suppressPackageStartupMessages(library(janitor))
+suppressPackageStartupMessages(library(ggthemes))
+suppressPackageStartupMessages(library(socviz))
+suppressPackageStartupMessages(library(patchwork))
+
+
+#Baseline plot settings
+theme_set(theme_minimal(base_family = "Helvetica", base_size = 24) +
+            theme(panel.grid.minor = element_blank(),
+                  axis.title.y = element_text(margin = margin(0, 20, 0, 0)),
+                  axis.title.x = element_text(margin = margin(20, 0, 0, 0)),
+                  axis.line.x = element_line(colour = 'black', size=0.5,
+                                             linetype='solid'),
+                  axis.line.y = element_line(colour = 'black', size=0.5,
+                                             linetype='solid'),
+                  strip.text = element_text(face = "bold"),
+                  plot.caption = element_text(colour = "#AAAAAA"),
+                  plot.margin = margin(3,15,3,3,"mm")))
+options(digits = 2, scipen = 999)
+
+`%nin%` <- negate(`%in%`)
+```
+
+
+## Introduction
+
+Example code for OR plot for Lucie's thesis.
+
+
+## Load and clean data
+
+```{r}
+#Import
+or_data <- read_excel("data/GLA_HOO_OR.xlsm",
+                      sheet = "OR graph") %>% 
+  #assign true NA values
+  mutate(across(Enet:upper, ~na_if(.x, "NA"))) %>% 
+  #Coerce from character to numeric variables
+  mutate(across(Enet:upper, as.numeric)) %>% 
+  #round to 2 decimal places (function from package socviz)
+  round_df()
+
+or_data
+```
+
+
+## Plots
+
+Create distinct plots for each binary variable to be "patched" together later and continuous variables and categorical variables
+
+```{r}
+#quick look at filtered values
+or_data %>% 
+  filter(str_detect(Term, "ETHNICITY|SUPPORT|REASON|PROPERTY|RSNSCT"))  %>% 
+ #arrange in order of ENet/LR Odds Ratio
+  arrange(LR) %>%
+  na.omit()
+  #We will factorise the Term variable according to this order
+  #*IMPORTANT*
+  #I'm guessing that "Referral services" is the reference value here, 
+  # I may be wrong - you can sort this out. The reference should be the
+  # first term in the factor to make the plot easier to understand.
+```
+
+```{r, fig.width=16, fig.height=14}
+or_data %>% 
+  filter(str_detect(Term, "PROPERTY|SUPPORT|REASON")) %>% 
+  na.omit() %>%
+  add_row(., Term = "SUPPORT No", Enet = 1, LR = 1, upper = 1, lower = 1) %>% 
+  add_row(., Term = "REASON Applicant terminated accommodation", Enet = 1, LR = 1, upper = 1, lower = 1) %>% 
+  add_row(., Term = "PROPERTY Employment/armed\nforces accommodation", Enet = 1, LR = 1, upper = 1, lower = 1) %>% 
+  mutate(Term = factor(Term,
+                       levels = c("PROPERTY Employment/armed\nforces accommodation",
+                                  "PROPERTY Hostels & B&Bs",
+                                  "PROPERTY Roofless",
+                                  "PROPERTY Prison",
+                                  "PROPERTY Sofa-surfing",
+                                  "PROPERTY Hospital",
+                                  "PROPERTY LA tenancy",
+                                  "PROPERTY Home ownership",
+                                  "PROPERTY RSL tenancy",
+                                  "REASON Applicant terminated accommodation",
+                                  "REASON Eviction UK borders",
+                                  "REASON Service tied accommodation",
+                                  "REASON Violent abusive dispute",
+                                  "REASON Fleeing",
+                                  "REASON Overcrowding",
+                                  "REASON HO advice",
+                                  "REASON Financial / benefits issues",
+                                  "SUPPORT No",
+                                  "SUPPORT Yes",
+                                  "SUPPORT Not known"))) %>% 
+  #now start  the plot
+  ggplot(aes(fct_rev(Term), LR, ymin=lower, ymax = upper)) +
+  #LR values
+  geom_pointrange(aes(color = "Logistic Regression")) +
+  #Add the Enet values
+  geom_point(aes(y = Enet, colour = "Enet"), size = 2.5) +
+  #Solid line at y=1 - aids interpretation
+  geom_hline(yintercept = 1, size = 1.2, colour = "black") +
+  # Log the y axis - you might need to play around with the limits
+  scale_y_log10(limits = c(0.02, 8),
+                           breaks = c(0.05, 0.1, 0.25, 0.5, 0.75,
+                                      2, 4, 8)) +
+  #We'll add a custom legend
+  scale_colour_manual(name = "Model", 
+                      breaks = c("Enet", "Logistic Regression"),
+                      values = c("Enet" = "#CC6677", 
+                                 "Logistic Regression" = "#4477AA")) +
+  theme(legend.position = "none") +
+  coord_flip() +
+  labs(x = "",
+       y = "", 
+       #subtitle handy for the combined plot
+       subtitle = "Categorical variables") -> categorical_plot
+categorical_plot
+```
+
+### CONTINUOUS variables
+
+```{r}
+#quick look at filtered values
+or_data %>% 
+  filter(Term %in% c("ACTIVITY COUNT", "AGEATAPP", "APP2OUT", "VULNERABILITY COUNT")) %>% 
+ #arrange in order of ENet/LR Odds Ratio
+  arrange(LR) %>%
+  na.omit()
+  #We will factorise the Term variable according to this order
+  #*IMPORTANT*
+  #I'm guessing that "Referral services" is the reference value here, 
+  # I may be wrong - you can sort this out. The reference should be the
+  # first term in the factor to make the plot easier to understand.
+```
+
+
+```{r, fig.width=16, fig.height=4}
+or_data %>% 
+  filter(Term %in% c("ACTIVITY COUNT", "AGEATAPP", "APP2OUT"))  %>% 
+  na.omit() %>%
+  mutate(Term = factor(Term,
+                       levels = c("ACTIVITY COUNT",
+                                  "AGEATAPP", 
+                                  "APP2OUT"))) %>% 
+  #now start  the plot
+  ggplot(aes(fct_rev(Term), LR, ymin=lower, ymax = upper)) +
+  #LR values
+  geom_pointrange(aes(colour = "Logistic Regression")) +
+  #Add the Enet values
+  geom_point(aes(y = Enet, colour = "Enet"), size = 2.5) +
+  #Solid line at y=1 - aids interpretation
+  geom_hline(yintercept = 1, size = 1.2, colour = "black") +
+  # Log the y axis - you might need to play around with the limits
+  scale_y_log10(limits = c(0.02, 8),
+                           breaks = c(0.05, 0.1, 0.25, 0.5, 0.75,
+                                      2, 4, 8)) +
+  #We'll add a custom legend
+  scale_colour_manual(name = "Model", 
+                      breaks = c("Enet", "Logistic Regression"),
+                      values = c("Enet" = "#CC6677", 
+                                 "Logistic Regression" = "#4477AA")) +
+  coord_flip() +
+  theme(legend.position = "none") +
+  labs(x = "",
+       y = "", 
+       #subtitle handy for the combined plot
+       subtitle = "Continuous variables") -> continuous_plot
+continuous_plot
+```
+Binary variables (VULNERABILITY, GENDER, ALL ACTIVITY RELATED VARS)
+
+### BINARY VULNERABILITY variables
+
+```{r}
+or_data %>% 
+  filter(str_detect(Term, c("ACTIVITY|VULNERABILITY|GENDER|PREVIOUS APPROACH")), 
+         Term != "ACTIVITY COUNT", 
+         Term != "VULNERABILITY COUNT") %>%
+  na.omit() %>%
+  arrange(LR) 
+```
+
+```{r, fig.width=16, fig.height=10}
+or_data %>% 
+  filter(str_detect(Term, c("ACTIVITY|VULNERABILITY|GENDER|PREVIOUS APPROACH")), 
+         Term != "ACTIVITY COUNT", 
+         Term != "VULNERABILITY COUNT")   %>% 
+  na.omit() %>% 
+  mutate(Term = factor(Term,
+                       levels = c(
+                                  "ACTIVITY Help moving",
+                                  "ACTIVITY Homelessness rights",
+                                  "ACTIVITY HO advice",
+                                  "ACTIVITY Financial assistance",
+                                  "ACTIVITY Help remaining",
+                                  "ACTIVITY Other",
+                                  "ACTIVITY BY 3 Other",
+                                  "ACTIVITY TYPE 2 Casework",
+                                  "VULNERABILITY Lack of support",
+                                  "VULNERABILITY Mental health"))) %>% 
+  #now start  the plot
+  ggplot(aes(fct_rev(Term), LR, ymin=lower, ymax = upper)) +
+  #LR values
+  geom_pointrange(aes(color = "Logistic Regression")) +
+  #Add the Enet values
+  geom_point(aes(y = Enet, colour = "Enet"), size = 2.5) +
+  #Solid line at y=1 - aids interpretation
+  geom_hline(yintercept = 1, size = 1.2, colour = "black") +
+  # Log the y axis - you might need to play around with the limits
+  scale_y_log10(limits = c(0.02, 8),
+                           breaks = c(0.05, 0.1, 0.25, 0.5, 0.75,
+                                      2, 4, 8)) +
+  #We'll add a custom legend
+  scale_colour_manual(name = "Model", 
+                      breaks = c("Enet", "Logistic Regression"),
+                      values = c("Enet" = "#CC6677", 
+                                 "Logistic Regression" = "#4477AA")) +
+  theme(legend.position = "none") +
+  coord_flip() +
+  labs(x = "",
+       y = "", 
+       #subtitle handy for the combined plot
+       subtitle = "Binary variables") -> binary_plot
+binary_plot
+```
+
+## Combine plots
+
+```{r, fig.width=18, fig.height=24}
+patch_design <- c(area(1, 1, 2, 4),
+                  area(3, 1, 14, 4),          # Specify design of grid
+                  area(15, 1, 20, 4))
+
+combined <- continuous_plot/categorical_plot/binary_plot + 
+  labs(y = "Odds Ratio 95% CI (log scale)",
+       x = "") +
+ # plot_annotation(title = "Odds ratios for Significant Terms in both General Linear Models") +
+  plot_layout(guides="collect", design = patch_design) &
+  theme(legend.position = "bottom")
+
+combined
+```
+
+```{r, eval=FALSE}
+ggsave("or_plot_GLAHOO.png", combined, width = 15, height = 22, 
+       bg = "white")
+```
+
