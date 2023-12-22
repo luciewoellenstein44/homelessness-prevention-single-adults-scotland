@@ -55,7 +55,7 @@ LR_graph <- function(df, title, best) {
     geom_vline(xintercept = best, 
                color = "grey", 
                linetype = "longdash") +
-    theme(legend.position = "none") 
+    theme(legend.position = "right") 
 }
 ```
 
