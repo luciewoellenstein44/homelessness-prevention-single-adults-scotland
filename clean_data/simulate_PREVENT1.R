@@ -15,8 +15,7 @@ library("data.table")
 ### the following is a simulated PREVENT1 data set 
 
 # read in the data definition table from csv file
-folder <- "/Users/luciewoellenstein/Documents/PhD/data/"
-def_table <- defRead(paste(folder, "PREVENT1_def_table.csv", sep = ""))
+def_table <- defRead("PREVENT1_def_table.csv")
 
 # simulate a data set with 1000 observations and no correlation using data definition table - check to create multiple datasets 
 set.seed(123)
@@ -61,6 +60,6 @@ summary(data[,"VULNERABILITY_COUNT"])
 
 # save data set to an external csv 
 write.csv(data, 
-          "/Users/luciewoellenstein/Documents/PhD/data/simulated_PREVENT1_data.csv", 
+          "clean_data.csv", 
           row.names = FALSE)
 
