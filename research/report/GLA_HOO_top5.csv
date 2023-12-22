@@ -1,0 +1,16 @@
+Variable + Category,Appearances,VIM,,,,,,
+,,ENet,LRmRMR,AdaboostM1,Bag-Adaboost,RF,XGB,Average VIM
+APP2OUT,5,0.1,100,100,100,100,100,83.4
+ACTIVITY Homelessness rights,5,26.9,89.1,92.9,93.2,30.6,48.4,63.5
+PROPERTY Prison,4,88.3,43.4,55.4,44.5,18.6,36.2,47.7
+REASON Eviction UK borders,3,84.1,59.9,29.5,24.8,6.5,11.6,36.1
+ACTIVITY Help remaining,1,56.1,83.3,9.1,18.3,16.1,16.8,33.3
+RSNSCT Prop unavailable in future,2,11.5,NA,19.9,67.4,23.3,14.9,27.4
+AGEATAPP,3,0.2,17.9,25.7,21.8,48.3,37.7,25.3
+SUPPORT Not known,1,11.7,62.3,19,19,17.4,20.9,25.1
+PROPERTY Hostels & B&Bs,1,100,34.1,3,2.2,1.9,4.3,24.3
+REASON Financial / benefits issues,1,41.1,53.2,10.3,0.6,24.5,14.4,24
+PROPERTY Roofless,1,93.1,31.8,2.9,0.7,1.4,2.9,22.1
+PROPERTY Sofa-surfing,1,80.2,31.8,3.4,1.8,2,3.6,20.5
+ACTIVITY BY 3,1,20.8,76.4,2.3,7.2,7.9,2.1,19.5
+VULNERABILITY Lack of support,1,14.2,74.5,6.5,7,8.2,4.9,19.2
