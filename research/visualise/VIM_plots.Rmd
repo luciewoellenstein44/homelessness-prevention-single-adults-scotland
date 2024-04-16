@@ -25,7 +25,12 @@ A fake synthetic example of the data set is available in /clean_data/clean_data.
 
 The following chunk loads the libraries necessary. Install these using install.packages("package name").
 
-```{r}
+```{r setup, include=FALSE}
+# set working directory for the whole notebook (this should be the highest level of the github repo 'homelessness-prevention-single-adults-scotland')
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = "/homelessness-prevention-single-adults-scotland")  # amend as necessary to where your repo sits
+
+# load packages
 library("tidyverse")
 library("gridExtra")
 library("grid")
@@ -68,81 +73,76 @@ reformat_PREVENT1 <- function(VIM_df) {
     mutate(rowname = as.factor(
       recode(
         rowname,
-        "PROPERTYaccomm_tied_employment_armed_forces"	=	"PROPERTY Service tied accommodation",
-        "PROPERTYfamily"	=	"PROPERTY Family"	,
-        "PROPERTYhostel_B&B"	=	"PROPERTY Hostels & B&Bs",
-        "PROPERTYroofless"	=	"PROPERTY Roofless"	,
-        "PROPERTYfriends_partners"	=	"PROPERTY Friends & partners",
-        "PROPERTYhome_ownership"	=	"PROPERTY Home ownership",
-        "PROPERTYhospital"	=	"PROPERTY Hospital",
-        "PROPERTYLA_tenancy"	=	"PROPERTY LA tenancy",
-        "PROPERTYlodger"	=	"PROPERTY Lodger",
-        "PROPERTYother"	=	"PROPERTY Other",
-        "PROPERTYprison"	=	"PROPERTY Prison",
-        "PROPERTYPRS_tenancy"	=	"PROPERTY PRS tenancy",
-        "PROPERTYRSL_tenancy"	=	"PROPERTY RSL tenancy",
-        "PROPERTYsofa_surfing"	=	"PROPERTY Sofa-surfing",
-        "PROPERTYsupported_accom"	=	"PROPERTY Supported accommodation",
-        "PROPERTYunknown_refused"	=	"PROPERTY Unknown or refused",
-        "REASONasked_to_leave"	=	"REASON Asked to leave"	,
-        "REASONdischarge_prison_hospital_institution"	=	"REASON Discharge"	,
-        "REASONdispute_household_relationship_breakdown_non_violent"	=	"REASON Non-violent dispute"	,
-        "REASONdispute_household_violent_abusive"	=	"REASON Violent abusive dispute"	,
-        "REASONeviction_UK_borders_agency"	=	"REASON Eviction UK borders"	,
-        "REASONfleeing_non_domestic_abuse_hate_crime_antisocial_behaviour"	=	"REASON Fleeing"	,
-        "REASONgeneral_housing_options_advice"	=	"REASON HO advice"	,
-        "REASONharrassment"	=	"REASON Harassment"	,
-        "REASONother_financial_difficulties_benefit_issues"	=	"REASON Financial / benefits issues"	,
-        "REASONother_landlord_action_resulting_termination"	=	"REASON Landlord action"	,
-        "REASONother_reason_for_leaving_accom"	=	"REASON Other leaving accom"	,
-        "REASONother_reason_loss_eviction_reposession"	=	"REASON Other loss accom"	,
-        "REASONovercrowding"	=	"REASON Overcrowding"	,
-        "REASONproperty_condition_or_accom_unsuitable"	=	"REASON Condition unsuitable"	,
-        "REASONrisk_or_loss_service_tied_accommodation"	=	"REASON Service tied accom"	,
-        "REASONtermination_tenancy_mortage_rent_arrears_default"	=	"REASON Rent arrears / default"	,
-        "REASONapplicant_terminated_secure_accom"	=	"REASON Applicant termination"	,
-        "financial_assistance_adviceTRUE"	=	"ACTIVITY Financial assistance"	,
-        "client_informed_of_rights_under_homelessness_legislationTRUE"	=	"ACTIVITY Homelessness rights"	,
-        "general_housing_advice_tenancy_rights_adviceTRUE"	=	"ACTIVITY HO advice"	,
-        "referral_to_health_social_work_employment_servicesTRUE"	=	"ACTIVITY Referral services"	,
-        "mediation_outreachTRUE"	=	"ACTIVITY Mediation"	,
-        "help_to_move_to_other_propertyTRUE"	=	"ACTIVITY Help moving"	,
-        "rent_repairs_referrals_neogtiation_with_landlordsTRUE"	=	"ACTIVITY Landlord negotiations"	,
-        "help_to_remain_in_accommodationTRUE"	=	"ACTIVITY Help remaining"	,
-        "other_activityTRUE"	=	"ACTIVITY Other"	,
-        "tenancy_social_care_support_adaptations_to_propertyTRUE"	=	"ACTIVITY Social care & adaptations"	,
-        "mortgage_homeownership_adviceTRUE"	=	"ACTIVITY Home ownership advice"	,
-        "ethnicitywhite_scottish"	=	"ETHNICITY White Scottish"	,
-        "ethnicitywhite_british"	=	"ETHNICITY White British" 	,
-        "ethnicityother_white"	=	"ETHNICITY Other White"	,
-        "ethnicitywhite_polish"	=	"ETHNICITY White Polish"	,
-        "ethnicityasian"	=	"ETHNICITY Asian"	,
-        "ethnicityother"	=	"ETHNICITY Other"	,
-        "ethnicitynot_known"	=	"ETHNICITY Not known"	,
-        "ethnicitycarribean_black"	=	"ETHNICITY Caribbean / Black"	,
-        "ethnicitymixed"	=	"ETHNICITY Mixed"	,
-        "ethnicityrefused"	=	"ETHNCITIY Refused",
-        "activity_type_2TRUE"	=	"ACTIVITY TYPE 2"		,
-        "activity_type_1TRUE"	=	"ACTIVITY TYPE 1"		,
-        "activity_type_3TRUE"	=	"ACTIVITY TYPE 3"		,
-        "activity_by_2TRUE"	=	"ACTIVITY BY 2"	,
-        "activity_by_1TRUE"	=	"ACTIVITY BY 1"	,
-        "activity_by_3TRUE"	=	"ACTIVITY BY 3"	,
-        "RSNSCThave_to_leave_accommodation_household"	=	"RSNSCT Need to leave accom"	,
-        "RSNSCTproperty_may_no_longer_be_suitable_available_in_future"	=	"RSNSCT Prop unavailable in future"	,
-        "vul_count"	=	"VULNERABILITY COUNT"	,
-        "mental_vulTRUE"	=	"VULNERABILITY Mental health"	,
-        "lackofsupport_vulTRUE"	=	"VULNERABILITY Lack of support"	,
-        "fin_vulTRUE"	=	"VULNERABILITY Financial"	,
-        "phys_vulTRUE"	=	"VULNERABILITY Physical"	,
-        "unmetneed_vulTRUE"	=	"VULNERABILITY Unmet need"	,
-        "refused_vulTRUE" = "VULNERABILITY refused",
-        "SUPPORT1" = "SUPPORT Yes",
-        "SUPPORT2" = "SUPPORT Not known",
-        "gender2" = "GENDER Female",
-        "ageatapp" = "AGEATAPP",
-        "previous_approachTRUE" = "Previous approach",
-        "activity_count" = "ACTIVITY COUNT"
+        "PROPERTY4"	=	"PROPERTY Service tied accommodation",
+        "PROPERTY6"	=	"PROPERTY Family"	,
+        "PROPERTY10"	=	"PROPERTY Hostels & B&Bs",
+        "PROPERTY11"	=	"PROPERTY Roofless"	,
+        "PROPERTY6"	=	"PROPERTY Friends & partners",
+        "PROPERTY5"	=	"PROPERTY Home ownership",
+        "PROPERTY8"	=	"PROPERTY Hospital",
+        "PROPERTY1"	=	"PROPERTY LA tenancy",
+        "PROPERTY14"	=	"PROPERTY Lodger",
+        "PROPERTY13"	=	"PROPERTY Other",
+        "PROPERTY7"	=	"PROPERTY Prison",
+        "PROPERTY3"	=	"PROPERTY PRS tenancy",
+        "PROPERTY2"	=	"PROPERTY RSL tenancy",
+        "PROPERTY12"	=	"PROPERTY Sofa-surfing",
+        "PROPERTY9"	=	"PROPERTY Supported accommodation",
+        "PROPERTY15"	=	"PROPERTY Unknown or refused",
+        "REASON13"	=	"REASON Asked to leave"	,
+        "REASON5"	=	"REASON Discharge"	,
+        "REASON9"	=	"REASON Non-violent dispute"	,
+        "REASON8"	=	"REASON Violent abusive dispute"	,
+        "REASON17"	=	"REASON Eviction UK borders"	,
+        "REASON10"	=	"REASON Fleeing"	,
+        "REASON15"	=	"REASON HO advice"	,
+        "REASON11"	=	"REASON Harassment"	,
+        "REASON16"	=	"REASON Financial / benefits issues"	,
+        "REASON2"	=	"REASON Landlord action"	,
+        "REASON14"	=	"REASON Other leaving accommodaation"	,
+        "REASON7"	=	"REASON Other loss accommodation"	,
+        "REASON12"	=	"REASON Overcrowding"	,
+        "REASON6"	=	"REASON Condition unsuitable"	,
+        "REASON4"	=	"REASON Service tied accom"	,
+        "REASON1"	=	"REASON Rent arrears / default"	,
+        "REASON3"	=	"REASON Applicant termination"	,
+        "ETHNICITY11"	=	"ETHNICITY White Scottish"	,
+        "ETHNICITY9"	=	"ETHNICITY White British" 	,
+        "ETHNICITY7"	=	"ETHNICITY Other White"	,
+        "ETHNICITY12"	=	"ETHNICITY White Polish"	,
+        "ETHNICITY2"	=	"ETHNICITY Asian"	,
+        "ETHNICITY6"	=	"ETHNICITY Other"	,
+        "ETHNICITY5"	=	"ETHNICITY Not known"	,
+        "ETHNICITY3"	=	"ETHNICITY Caribbean / Black"	,
+        "ETHNICITY4"	=	"ETHNICITY Mixed"	,
+        "ETHNICITY8"	=	"ETHNCITIY Refused",
+        "ACTIVITY_TYPE21"	=	"ACTIVITY TYPE 2"		,
+        "ACTIVITY_TYPE11"	=	"ACTIVITY TYPE 1"		,
+        "ACTIVITY_TYPE31"	=	"ACTIVITY TYPE 3"		,
+        "ACTIVITY_BY21"	=	"ACTIVITY BY 2"	,
+        "ACTIVITY_BY11"	=	"ACTIVITY BY 1"	,
+        "ACTIVITY_BY31"	=	"ACTIVITY BY 3"	,
+        "RSNSCT2"	=	"RSNSCT Need to leave accommodation"	,
+        "RSNSCT3"	=	"RSNSCT Property unavailable in future"	,
+        "MENTAL_VUL1"	=	"VULNERABILITY Mental health"	,
+        "LACKOFSUPPORT_VUL1"	=	"VULNERABILITY Lack of support"	,
+        "FIN_VUL1"	=	"VULNERABILITY Financial"	,
+        "PHYS_VUL1"	=	"VULNERABILITY Physical"	,
+        "UNMETNEED_VUL1"	=	"VULNERABILITY Unmet need"	,
+        "REFUSED_VUL1" = "VULNERABILITY refused",
+        "GENDER1" = "GENDER Female",
+        "PREVIOUS_APPROACH1" = "Previous approach",
+        "ACTIVITY_FINANCIAL_ASSISTANCE1" = "ACTIVITY_FINANCIAL_ASSISTANCE",
+        "ACTIVITY_HELP_MOVING1" = "ACTIVITY_HELP_MOVING",
+        "ACTIVITY_HELP_REMAINING1" = "ACTIVITY_HELP_REMAINING",
+        "ACTIVITY_HO_ADVICE1" = "ACTIVITY_HO_ADVICE",
+        "ACTIVITY_HOME_OWNERHSIP_ADVICE1" = "ACTIVITY_HOME_OWNERHSIP_ADVICE",
+        "ACTIVITY_HOMELESSNESS_RIGHTS1" = "ACTIVITY_HOMELESSNESS_RIGHTS",
+        "ACTIVITY_LANDLORD_NEGOTIATIONS1" = "ACTIVITY_LANDLORD_NEGOTIATIONS",
+        "ACTIVITY_MEDIATION1" = "ACTIVITY_MEDIATION",
+        "ACTIVITY_OTHER1" = "ACTIVITY_OTHER",
+        "ACTIVITY_REFERRAL_SERVICES1" = "ACTIVITY_REFERRAL_SERVICES",
+        "ACTIVITY_SOCIAL_CARE_ADAPTIONS1" = "ACTIVITY_SOCIAL_CARE_ADAPTIONS",
       )
     ))
 }
@@ -158,14 +158,14 @@ pull_top <- function(VIMdf, n) {
 }
 
 # set the destination filepath - should be in working directory then "/research/report/"
-destfilepath <- "/homelessness-prevention-single-adults-scotland/research/report/"
+destfilepath <- "research/report"
 ```
 
 Load in the data 
 
 ```{r}
 # set the working directory for this chunk where the data is found 
-setwd("/homelessness-prevention-single-adults-scotland/research/visualise/data/VIMs/")
+setwd("/homelessness-prevention-single-adults-scotland/research/visualise/data/VIMs") # amend as necessary to where your repo sits
 folder <- list.files(pattern="*.csv")
 
 # read the VIMs

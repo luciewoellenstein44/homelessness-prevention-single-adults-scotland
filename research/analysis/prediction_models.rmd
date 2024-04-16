@@ -4,14 +4,83 @@ author: "Lucie Woellenstein"
 output: html_document
 ---
 
-This script carried out the modelling of the outcome variable
-- script was repeated fro every outcome variable / data set
-
+This script carried out the modelling of the OUTCOME variable
+- script was repeated fro every OUTCOME variable / data set
 
 ```{r setup, include=FALSE}
-#set working directory of the whole document (includes 3 folders: raw_data, clean_data, research) - reset for every code chunk reading
-knitr::opts_knit$set(root.dir="path/to/file") # put in correct path to working directory ('homelessness-prevention-single-adults-scotland')
+# set working directory for the whole notebook (this should be the highest level of the github repo 'homelessness-prevention-single-adults-scotland')
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = "/homelessness-prevention-single-adults-scotland") # amend as necessary to where your repo sits
 
+# install packages
+if (!requireNamespace("caret", quietly = TRUE)) {
+  install.packages("caret")
+}
+if (!requireNamespace("stats", quietly = TRUE)) {
+  install.packages("stats")
+}
+if (!requireNamespace("DescTools", quietly = TRUE)) {
+  install.packages("DescTools")
+}
+if (!requireNamespace("mlbench", quietly = TRUE)) {
+  install.packages("mlbench")
+}
+if (!requireNamespace("glmnet", quietly = TRUE)) {
+  install.packages("glmnet")
+}
+if (!requireNamespace("gbm", quietly = TRUE)) {
+  install.packages("gbm")
+}
+if (!requireNamespace("randomForest", quietly = TRUE)) {
+  install.packages("randomForest")
+}
+if (!requireNamespace("adabag", quietly = TRUE)) {
+  install.packages("adabag")
+}
+if (!requireNamespace("xgboost", quietly = TRUE)) {
+  install.packages("xgboost")
+}
+# install.packages("fastAdaboost") - this package has been removed from CRAN - now available in archive
+# download here: https://cran.r-project.org/src/contrib/Archive/fastAdaboost/ 
+if (!requireNamespace("fastAdaboost", quietly = TRUE)) {
+  install.packages("path/to/locally/downloaded/archived/fastAdaboost")
+}
+if (!requireNamespace("pROC", quietly = TRUE)) {
+  install.packages("pROC")
+}
+if (!requireNamespace("tidyverse", quietly = TRUE)) {
+  install.packages("tidyverse")
+}
+if (!requireNamespace("GGally", quietly = TRUE)) {
+  install.packages("GGally")
+}
+if (!requireNamespace("tidymodels", quietly = TRUE)) {
+  install.packages("tidymodels")
+}
+if (!requireNamespace("ConfusionTableR", quietly = TRUE)) {
+  install.packages("ConfusionTableR")
+}
+if (!requireNamespace("praznik", quietly = TRUE)) {
+  install.packages("praznik")
+}
+if (!requireNamespace("gridExtra", quietly = TRUE)) {
+  install.packages("gridExtra")
+}
+if (!requireNamespace("grid", quietly = TRUE)) {
+  install.packages("grid")
+}
+if (!requireNamespace("broom", quietly = TRUE)) {
+  install.packages("broom")
+}
+if (!requireNamespace("inspectdf", quietly = TRUE)) {
+  install.packages("inspectdf")
+}
+if (!requireNamespace("readr", quietly = TRUE)) {
+  install.packages("readr")
+}
+if (!requireNamespace("infotheo", quietly = TRUE)) {
+  install.packages("infotheo")
+}
 
 # load libraries
 library("caret")
@@ -34,36 +103,80 @@ library("gridExtra")
 library("grid")
 library("broom")
 library("inspectdf")
+library("readr")
+library("infotheo")
 
-# create object for folder to write to 'research/report/' should be inside working directory
-folder <- "/research/report/"
+# create object for folder to write to - should be inside working directory
+folder <- "research/visualise/data/VIMs"
 ```
 
 LOAD AND PREPARE THE DATA
 
 ```{r}
+
 # load the data 
-data <- read_csv("/clean_data/clean_data.csv") 
+data <- read_csv("clean_data/clean_data.csv") 
+
+# make RSNSCT variable based on REASON variable
 
 
-# prepare the data - factorise categorical, remove unwanted variables
+# prepare the data - factorise categorical, remove unwanted variables, create RSNSCT variable
 data <- data %>%
-  mutate(person_id = NULL,
-         time_error = NULL,
-         made_homelessness_application = NULL, # removed as it was the other outcome variable correlated with the one modelled here
-         RSNSCT = as.factor(RSNSCT),
-         ethnicity = as.factor(ethnicity),
+  mutate(id = NULL,
+         ETHNICITY = as.factor(ETHNICITY),
          REASON = as.factor(REASON),
          PROPERTY = as.factor(PROPERTY),
-         gender = as.factor(gender),
-         SUPPORT = as.factor(SUPPORT),
-         other_activity = other, # better name - so known it is about the prevention activity
-         other = NULL, # remove old other
-         previous_approach = new_previous_approach, # gave shorter name
-         new_previous_approach = NULL,
-         APP2ACT = NULL,
-         ACT2OUT = NULL)
+         GENDER = as.factor(GENDER),
+         RSNSCT = as.factor(case_when(
+                              REASON == "1" ~ "1",
+                              REASON == "3" ~ "1",
+                              REASON == "4" ~ "1",
+                              REASON == "5" ~ "1",
+                              REASON == "7" ~ "1",
+                              REASON == "8" ~"2", 
+                              REASON == "9" ~ "2", 
+                              REASON == "10" ~ "2", 
+                              REASON == "12" ~ "2", 
+                              REASON == "13" ~ "2", 
+                              REASON == "14" ~ "2", 
+                              REASON == "15" ~ "2",
+                              TRUE ~ "3")
+                            ),
+         FIN_VUL = as.factor(FIN_VUL),
+         PHYS_VUL = as.factor(PHYS_VUL),
+         MENTAL_VUL = as.factor(MENTAL_VUL),
+         UNMETNEED_VUL = as.factor(UNMETNEED_VUL),
+         LACKOFSUPPORT_VUL = as.factor(LACKOFSUPPORT_VUL),
+         ACTIVITY_TYPE1 = as.factor(ACTIVITY_TYPE1),
+         ACTIVITY_TYPE2 = as.factor(ACTIVITY_TYPE2),
+         ACTIVITY_TYPE3 = as.factor(ACTIVITY_TYPE3),
+         ACTIVITY_BY1 = as.factor(ACTIVITY_BY1),
+         ACTIVITY_BY2 = as.factor(ACTIVITY_BY2),
+         ACTIVITY_BY3 = as.factor(ACTIVITY_BY3),
+         ACTIVITY_MEDIATION = as.factor(ACTIVITY_MEDIATION),
+         ACTIVITY_FINANCIAL_ASSISTANCE = as.factor(ACTIVITY_FINANCIAL_ASSISTANCE),
+         ACTIVITY_LANDLORD_NEGOTIATIONS = as.factor(ACTIVITY_LANDLORD_NEGOTIATIONS),
+         ACTIVITY_HELP_REMAINING = as.factor(ACTIVITY_HELP_REMAINING),
+         ACTIVITY_HOME_OWNERHSIP_ADVICE = as.factor(ACTIVITY_HOME_OWNERHSIP_ADVICE),
+         ACTIVITY_SOCIAL_CARE_ADAPTIONS = as.factor(SOCIAL_CARE_ADAPTIONS),
+         SOCIAL_CARE_ADAPTIONS = NULL,
+         ACTIVITY_REFERRAL_SERVICES = as.factor(ACTIVITY_REFERRAL_SERVICES),
+         ACTIVITY_HOMELESSNESS_RIGHTS = as.factor(ACTIVITY_HOMELESSNESS_RIGHTS),
+         ACTIVITY_HO_ADVICE = as.factor(ACTIVITY_HO_ADVICE),
+         ACTIVITY_HELP_MOVING = as.factor(ACTIVITY_HELP_MOVING),
+         ACTIVITY_OTHER = as.factor(ACTIVITY_OTHER),
+         PREVIOUS_APPROACH = as.factor(PREVIOUS_APPROACH),
+         OUTCOME = as.factor(ifelse(OUTCOME == 0, "unsuccessful", "successful"))
+  )
 
+# standardise the continuous variables
+mean_APP2OUT <- mean(data$APP2OUT)
+sd_APP2OUT <- sd(data$APP2OUT)
+data$APP2OUT <- (data$APP2OUT - mean_APP2OUT) / sd_APP2OUT
+
+mean_AGEATAPP <- mean(data$AGEATAPP)
+sd_AGEATAPP <- sd(data$AGEATAPP)
+data$AGEATAPP <- (data$AGEATAPP - mean_AGEATAPP) / sd_AGEATAPP
 # inspect column types
 data %>% 
   inspect_types %>% 
@@ -81,7 +194,7 @@ set.seed(123)
 # split data into training and test samples using caret package
 # equal percentages of event case in both training and test set
 # create index on rows
-trainIndex <- createDataPartition(data$outcome, 
+trainIndex <- createDataPartition(data$OUTCOME, 
                                   p = .8, # 80% training
                                   list = FALSE)
 
@@ -93,27 +206,27 @@ test <- data[-trainIndex,]
 
 # check proportions are same in train and test data
 train %>% 
-  group_by(outcome) %>% 
+  group_by(OUTCOME) %>% 
   dplyr::summarize(count = n(),
                    prop=round(sum(count)/nrow(.)*100,2)) 
 
 test %>% 
-  group_by(outcome) %>% 
+  group_by(OUTCOME) %>% 
   dplyr::summarize(count = n(), 
                    prop=round(sum(count)/nrow(.)*100,2)) 
 
-# factorise outcome var- required to measure the ROC and include class probabilities in trainControl() later on
+# factorise OUTCOME var- required to measure the ROC and include class probabilities in trainControl() later on
 train <- train %>%
-  mutate(outcome = as.factor(outcome))
+  mutate(OUTCOME = as.factor(OUTCOME))
 test <- test %>%
-  mutate(outcome = as.factor(outcome))
+  mutate(OUTCOME = as.factor(OUTCOME))
 
-# relevel the outcome variable so the event case is the right one
+# relevel the OUTCOME variable so the event case is the right one
 train <- train %>%
-  mutate(outcome = relevel(outcome, 
-                           "unsuccessful"))
+  mutate(OUTCOME = relevel(OUTCOME, 
+                           "unsuccessful")) 
 test <- test %>%
-  mutate(outcome = relevel(outcome, 
+  mutate(OUTCOME = relevel(OUTCOME, 
                            "unsuccessful"))
 
 ```
@@ -144,11 +257,11 @@ mtry <- sqrt(ncol(train))
 
 # Build custom AUC function to extract AUC from the caret model object
 test_roc <- function(model, data) {
-  roc(data$outcome,
-      predict(model, data, type = "prob")[,"successful"])
+  roc(data$OUTCOME,
+      predict(model, data, type = "prob")[,"successful"]) 
 }
 
-# new function specifically for xgb to take the testing Y outcome variable and the d matrix as training data set
+# new function specifically for xgb to take the testing Y OUTCOME variable and the d matrix as training data set
 xgbtest_roc <- function(model, data, Y) {
   roc(Y,
       predict(model, data, type = "prob")[,"successful"])
@@ -165,7 +278,7 @@ BUILD AN ELASTIC NET CLASSIFIER WHICH USES L1 AND L2 REGULARIZATION
 set.seed(123)
 
 # train model 
-Enet_Fit <- train(outcome ~ ., 
+Enet_Fit <- train(OUTCOME ~ ., 
                   data = train, 
                   method = "glmnet",
                   metric = "ROC", # required for extracting AUROC later
@@ -183,13 +296,16 @@ plot(Enet_Fit)
 # extract the coefficients for the eNet model
 ENet_coefs <- Enet_Fit$finalModel %>%
   coef(Enet_Fit$bestTune$lambda) %>%
-  tidy() %>%
-  mutate(Term = row, 
-         row = NULL, 
-         Estimate = value, 
-         value = NULL, 
-         column = NULL) %>%
-  arrange(desc(abs(Estimate)))
+  as.matrix()  %>%
+  as.data.frame() 
+rownames(ENet_coefs)
+
+ENet_coefs <- ENet_coefs %>%
+                mutate(Term = rownames(ENet_coefs),
+                       Estimate = round(s1,1), 
+                       s1 = NULL) %>%
+                arrange(desc(abs(Estimate)))
+rownames(ENet_coefs) = NULL
 print(ENet_coefs) 
 
 # write the csv of eNet coefficients
@@ -207,7 +323,7 @@ ELASTIC NET MODEL EVALUATION
 # binary_class_cm provides several performance metrics
 ENet_metrics <- Enet_Fit %>%
   predict(test) %>%
-  binary_class_cm(test$outcome , 
+  binary_class_cm(test$OUTCOME , 
                   positive = "successful") # specify which class is the positive class (event case)
 
 
@@ -228,6 +344,7 @@ CALCULATE THE VARIABLE IMPORTANCE MEASURES FOR ELASTIC NET MODEL
 # pull out the VIMs for each variable in the ENet model
 EnetFit_imp <- varImp(Enet_Fit, 
                       scale = TRUE)$importance %>%
+  round(1) %>%
   as.data.frame() %>%
   rownames_to_column() %>%
   arrange(desc(Overall)) # overall is the measure
@@ -237,13 +354,13 @@ print(EnetFit_imp)
 
 # save VIMs in csv
 write.csv(EnetFit_imp, 
-          file.path(folder, "ENet_VIM.csv"), 
+          file.path(folder, "ENet_VIMs.csv"), 
           row.names = FALSE)
 ```
 
 
 BUILD A LOGISTIC REGRESSON MODEL USING MRMR FEATURE SELECTION
-- first Max relevance minimum redundancy (mRMR) feature selection is used to order variables from max relevance to the outcome variable and minimum redundancy to other variables 
+- first Max relevance minimum redundancy (mRMR) feature selection is used to order variables from max relevance to the OUTCOME variable and minimum redundancy to other variables 
 - this creates formulas to use in the training the model, each formula adds a variable. 
 - the performance metrics are graphed for each formula, and the best formula is the one where performance is highest and does not continue to improve
 
@@ -253,14 +370,14 @@ BUILD A LOGISTIC REGRESSON MODEL USING MRMR FEATURE SELECTION
 
 # get the mutual information of all features in the feature space - for understanding purposes
 # essentially how important each variable is for predicting another variable
-mutual_information <- mutinformation(data, method = "emp")
+mutual_information <- mutinformation(discretize(data), method = "emp")
 
 # mutual information is a measure of the inherent dependence expressed in the joint distribution of 
 # and relative to the marginal distribution of and under the assumption of independence
 
 # extract all the predictor variables from data set
 features <- data %>%
-    select(-outcome)
+    select(-OUTCOME)
 
 # calculate K (K = the number of available predictor variables)
 K <- length(features)
@@ -268,7 +385,7 @@ K <- length(features)
 # perform MRMR for all possible number of features to have in the model (1:K)
 MRMR <- lapply(c(1:K), 
                function(x) MRMR(features, 
-                                as.factor(data$outcome), 
+                                as.factor(data$OUTCOME), 
                                 k = x))
 
 # extract the predictor variable names in order of max relevance minimum redundancy
@@ -276,7 +393,7 @@ MRMR_selection <- names(MRMR[[K]]$selection)
 
 # write the formulas to go into the training model for each K
 formulas <- lapply(c(1:K), 
-                   function(x) as.formula(paste("outcome ~", 
+                   function(x) as.formula(paste("OUTCOME ~", 
                                                 paste(MRMR_selection[1:x], 
                                                       collapse = "+"))))
 print(formulas)
@@ -319,7 +436,7 @@ LRK_metrics <- list()
 for (i in 1:K) { 
   stats <- LRK_Fit[[i]] %>%
               predict(test) %>%
-              binary_class_cm(test$outcome, 
+              binary_class_cm(test$OUTCOME, 
                               positive = "successful") %>% # specify which class is the positive class (event case)
               .$record_level_cm
   # number the rows in stats data frame with (1:K) for each i^th LR model trained (each row holds performance metrics for one LR model)
@@ -362,7 +479,7 @@ LRK_metrics <- LRK_metrics %>%
   cbind(LRK_AUROC)
 print(LRK_metrics)
 
-# save out data fram of performance metrics for each LR model (1:K)
+# save out data frame of performance metrics for each LR model (1:K)
 write.csv(LRK_metrics, 
           file.path(folder, "LRK_metrics.csv"), 
           row.names = FALSE)
@@ -384,8 +501,8 @@ df <- LRK_metrics %>%
          value = "value", 
          -K)
 
-# create object for maxK which is the maximum number of features
-maxk <- 26
+# create object for maxk which is the maximum number of features
+maxk <- 32
 
 # plot the AUROC for each K number for both algorithms
 mRMR_LR_graph <- df %>% 
@@ -402,7 +519,7 @@ mRMR_LR_graph <- df %>%
   geom_line(aes(color = variable))  +
   labs(y = "Metrics") +
   scale_x_continuous(name = "K: Number of Variables in Model",
-                     minor_breaks = seq(1, maxK, 1)) +
+                     minor_breaks = seq(1, maxk, 1)) +
   guides(col = guide_legend("Performance Metric")) 
 
 # print the graph & visually pick best model (highest performance metrics & where additional features don't improve the model)
@@ -413,7 +530,7 @@ EXTRACT THE COEFFICIENTS, STANDARD ERRORS, P-VALUES FOR BEST LR MRMR MODEL
 
 ```{r}
 # extract the coefficients from the best model (picked in the graph in the last section)
-LRK_coefs <- LRK_Fit[[26]]$finalModel %>%
+LRK_coefs <- LRK_Fit[[5]]$finalModel %>%
   tidy() %>%
   arrange(desc(abs(estimate)))
 
@@ -430,8 +547,9 @@ CALCULATE THE VARIABLE IMPORTANCE MEASURES FOR THE BEST LR MRMR MODEL
 
 ```{r}
 # extract VIMs for best LR model 
-LRKFit_imp <- varImp(LRK_Fit[[26]], 
+LRKFit_imp <- varImp(LRK_Fit[[5]], 
                      scale = TRUE)$importance %>%
+  round(1) %>%
   as.data.frame() %>%
   rownames_to_column() %>%
   arrange(desc(Overall))
@@ -440,7 +558,7 @@ print(LRKFit_imp)
 
 # save out the variable importance measures 
 write.csv(LRKFit_imp, 
-          file.path(folder, "LRK_VIM.csv"), 
+          file.path(folder, "LR_VIMs.csv"), 
           row.names = FALSE)
 
 ```
@@ -458,7 +576,7 @@ TRAIN A RANDOM FOREST MODEL (RF)
 set.seed(123)
 
 # train random forest model
-rf_Fit <- train(outcome ~ ., 
+rf_Fit <- train(OUTCOME ~ ., 
                data = train, 
                method = "rf", 
                metric = "ROC", # required for extracting AUROC later
@@ -477,7 +595,7 @@ RF MODEL EVALUATION
 RF_metrics <- rf_Fit %>%
     predict(test) %>%
   # calculate performance metrics using binary_class_cm()
-    binary_class_cm(test$outcome, 
+    binary_class_cm(test$OUTCOME, 
                     positive = "successful") # specify the event case 
 
 # calculate the AUROC using custom function written at start of script
@@ -498,6 +616,7 @@ CALCULATE THE VARIABLE IMPORTANCE MEASURES FOR RF MODEL
 # extract variable importance measures from the random forest model
 rfFit_imp <- varImp(rf_Fit, 
                     scale = TRUE)$importance %>%
+  round(1) %>%
   as.data.frame() %>%
   rownames_to_column() %>%
   arrange(desc(Overall)) # overall is the measure
@@ -506,7 +625,7 @@ print(rfFit_imp)
 
 # save the VIMs for the random forest model in csv
 write.csv(rfFit_imp, 
-          file.path(folder, "RF_VIM.csv"), 
+          file.path(folder, "RF_VIMs.csv"), 
           row.names = FALSE)
 
 ```
@@ -523,7 +642,7 @@ baggedgrid = expand.grid(mfinal = seq(1,5,1), # number of trees in model to try
                          maxdepth = 10)  # maximum depth of a tree
 
 # train model using bagged AdaBoost
-B_Adaboost_Fit <- train(outcome~., 
+B_Adaboost_Fit <- train(OUTCOME~., 
                       data = train, 
                       method = "AdaBag",
                       tuneGrid = baggedgrid,
@@ -547,8 +666,8 @@ B_Adaboost_metrics <- B_Adaboost_Fit %>%
   # use the test data set to predict here
   predict(test) %>%
   # calculate performance metrics using binary_class_cm()
-  binary_class_cm(test$outcome, 
-                  positive = "successful") # set the event case class of the outcome variable
+  binary_class_cm(test$OUTCOME, 
+                  positive = "successful") # set the event case class of the OUTCOME variable
 
 # calculate AUROC using custome function written at start of script
 B_Adaboost_AUROC <- B_Adaboost_Fit %>% 
@@ -570,6 +689,7 @@ CALCULATE THE VARIABLE IMPORTANCE MEASURES FOR THE BAGGED ADABOOST MODEL
 # variable importance for bagged adaboost
 B_Adaboost_imp <- varImp(B_Adaboost_Fit, 
                          scale = TRUE)$importance %>%
+  round(1) %>%
   as.data.frame() %>%
   rownames_to_column() %>%
   arrange(desc(Overall)) # overall is the VIM column 
@@ -578,7 +698,7 @@ print(B_Adaboost_imp)
 
 # save bagged adaboost VIMs to csv
 write.csv(B_Adaboost_imp, 
-          file.path(folder, "BAdaboost_VIM.csv"), 
+          file.path(folder, "BAdaboost_VIMs.csv"), 
           row.names = FALSE)
 
 
@@ -598,7 +718,7 @@ M1grid = expand.grid(mfinal = seq(1,5,1), # trial depths 1-5
                      coeflearn = c("Freund", "Breiman")) # trial both coeflearn parameters
 
 # TRAIN ADABOOST.M1 MODEL
-AdaboostM1_Fit <- train(outcome~., 
+AdaboostM1_Fit <- train(OUTCOME~., 
                       data = train, 
                       method = "AdaBoost.M1",
                       tuneGrid = M1grid,
@@ -619,7 +739,7 @@ ADABOOST.M1 MODEL EVALUATION
 AdaboostM1_metrics <- AdaboostM1_Fit %>%
   predict(test) %>%
   # calculate performance metrics with binary_class_cm()
-  binary_class_cm(test$outcome, 
+  binary_class_cm(test$OUTCOME, 
                   positive = "successful") # set to event case class
 
 # calculate AUROC with the custom function written at start of script
@@ -641,6 +761,7 @@ CALCULATE THE VARIABLE IMPORTANCE MEASURES FOR ADABOOST.M1 MODEL
 # extract VIMs for adaboost.M1 model
 AdaboostM1_imp <- varImp(AdaboostM1_Fit, 
                          scale = TRUE)$importance %>%
+  round(1) %>%
   as.data.frame() %>%
   rownames_to_column() %>%
   arrange(desc(Overall)) # overall is the VIM column
@@ -649,7 +770,7 @@ print(AdaboostM1_imp)
 
 # save the VIMs to a csv
 write.csv(AdaboostM1_imp, 
-          file.path(folder, "AdaboostM1_VIM.csv"), 
+          file.path(folder, "AdaboostM1_VIMs.csv"), 
           row.names = FALSE)
 
 ```
@@ -666,20 +787,20 @@ if trends in the missing values are detected it will be captured by the model.
 ```{r }
 
 ### PREPARE THE DATA FOR XGB MODEL ###
-# requires One hot encoding (turn any categorical & outcome variables to numeric logical vars) 
+# requires One hot encoding (turn any categorical & OUTCOME variables to numeric factor vars) 
 
 
-# create vectors of outcome variables for train and test data set (& set outcome vars to 0s and 1s if not already)
-trainY <- train$outcome
-testY <- test$outcome
+# create vectors of OUTCOME variables for train and test data set (& set OUTCOME vars to 0s and 1s if not already)
+trainY <- train$OUTCOME
+testY <- test$OUTCOME
 
 # create the X matrices for the train and test data sets ( holds the predictor variables) and perform one hot encoding on matrix
 trainX <- model.matrix(~.+0, 
                        data = train %>% 
-                         select(-outcome)) 
+                         select(-OUTCOME)) 
 testX <- model.matrix(~.+0, 
                       data = test %>% 
-                        select(-outcome))
+                        select(-OUTCOME))
 
 # make tuneGrid for training
 XGBgrid <- expand.grid(nrounds = c(10,50,100), # number of iterations or trees the algorithm will use
@@ -743,6 +864,7 @@ CALCULATE THE VARIABLE IMPORTANCE MEASURES FOR XGB MODEL
 # VARIABLE IMPORTANCE FOR adaboost
 XGB_imp <- varImp(XGBFit, 
                   scale = TRUE)$importance %>%
+  round(1) %>%
   as.data.frame() %>%
   rownames_to_column() %>%
   arrange(desc(Overall)) # overall is the column holding the VIM
@@ -751,7 +873,7 @@ print(XGB_imp)
 
 # save the VIMs for XGB model to a csbv
 write.csv(XGB_imp, 
-          file.path(folder, "XGB_VIM.csv"), 
+          file.path(folder, "XGB_VIMs.csv"), 
           row.names = FALSE)
 
 ```
@@ -761,7 +883,7 @@ CREATE A DATA FRAME HOLDING PERFORMANCE METRICS OF ALL MODELS
 ```{r}
 # CSV for all metrics
 metrics_df <- rbind(ENet_metrics, 
-                    LRK_metrics[14, 2:25], # subset the best model e.g. the 14th (using 14 predictor variables)
+                    LRK_metrics[5, 2:25], # subset the best model e.g. the 14th (using 14 predictor variables)
                     RF_metrics,
                     B_Adaboost_metrics, 
                     AdaboostM1_metrics, 
