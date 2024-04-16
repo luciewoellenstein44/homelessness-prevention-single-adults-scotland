@@ -34,3 +34,75 @@ This folder also contains the data specification for this synthetic data set.
 /research/visualise/ - this folder contains Rmd files to create various visualisations that were created on the models or data in the Ph.D. All these Rmd files are built on data found in /research/visualise/data/ folder. The data in /research/visualise/data/ is the output data from the real Ph.D. analysis. This data went through statistical disclosure control to ensure that it does not identify anyone. 
 
 /research/report/ - this folder contains all of the visual outputs from the analysis. 
+
+Dependencies
+
+# install packages
+if (!requireNamespace("caret", quietly = TRUE)) {
+  install.packages("caret")
+}
+if (!requireNamespace("stats", quietly = TRUE)) {
+  install.packages("stats")
+}
+if (!requireNamespace("DescTools", quietly = TRUE)) {
+  install.packages("DescTools")
+}
+if (!requireNamespace("mlbench", quietly = TRUE)) {
+  install.packages("mlbench")
+}
+if (!requireNamespace("glmnet", quietly = TRUE)) {
+  install.packages("glmnet")
+}
+if (!requireNamespace("gbm", quietly = TRUE)) {
+  install.packages("gbm")
+}
+if (!requireNamespace("randomForest", quietly = TRUE)) {
+  install.packages("randomForest")
+}
+if (!requireNamespace("adabag", quietly = TRUE)) {
+  install.packages("adabag")
+}
+if (!requireNamespace("xgboost", quietly = TRUE)) {
+  install.packages("xgboost")
+}
+# install.packages("fastAdaboost") - this package has been removed from CRAN - now available in archive
+# download here: https://cran.r-project.org/src/contrib/Archive/fastAdaboost/ 
+if (!requireNamespace("fastAdaboost", quietly = TRUE)) {
+  install.packages("path/to/locally/downloaded/archived/fastAdaboost")
+}
+if (!requireNamespace("pROC", quietly = TRUE)) {
+  install.packages("pROC")
+}
+if (!requireNamespace("tidyverse", quietly = TRUE)) {
+  install.packages("tidyverse")
+}
+if (!requireNamespace("GGally", quietly = TRUE)) {
+  install.packages("GGally")
+}
+if (!requireNamespace("tidymodels", quietly = TRUE)) {
+  install.packages("tidymodels")
+}
+if (!requireNamespace("ConfusionTableR", quietly = TRUE)) {
+  install.packages("ConfusionTableR")
+}
+if (!requireNamespace("praznik", quietly = TRUE)) {
+  install.packages("praznik")
+}
+if (!requireNamespace("gridExtra", quietly = TRUE)) {
+  install.packages("gridExtra")
+}
+if (!requireNamespace("grid", quietly = TRUE)) {
+  install.packages("grid")
+}
+if (!requireNamespace("broom", quietly = TRUE)) {
+  install.packages("broom")
+}
+if (!requireNamespace("inspectdf", quietly = TRUE)) {
+  install.packages("inspectdf")
+}
+if (!requireNamespace("readr", quietly = TRUE)) {
+  install.packages("readr")
+}
+if (!requireNamespace("infotheo", quietly = TRUE)) {
+  install.packages("infotheo")
+}
